@@ -18,6 +18,13 @@ pub struct ScreenSize {
     pub height: u16,
 }
 
+pub struct RenderContext<'a> {
+    pub docs: &'a DocumentSet,
+    pub config: &'a Config,
+    pub engine: &'a SyntaxEngine,
+    pub horizontal_offset: usize,
+}
+
 pub struct TerminalSession {
     active: bool,
     alternate_screen: bool,
@@ -54,9 +61,7 @@ pub fn size() -> Result<ScreenSize> {
 
 pub fn render(
     out: &mut impl Write,
-    docs: &DocumentSet,
-    config: &Config,
-    engine: &SyntaxEngine,
+    ctx: &RenderContext<'_>,
     top_line: usize,
     prompt: Option<&str>,
     status: &str,
@@ -64,11 +69,11 @@ pub fn render(
     let screen = size()?;
     let content_height = screen
         .height
-        .saturating_sub(if config.status_bar { 1 } else { 0 });
+        .saturating_sub(if ctx.config.status_bar { 1 } else { 0 });
     let mut remaining_rows = content_height as usize;
     let mut global = top_line;
-    let line_number_width = if config.line_numbers {
-        docs.line_number_width()
+    let line_number_width = if ctx.config.line_numbers {
+        ctx.docs.line_number_width()
     } else {
         0
     };
@@ -76,16 +81,8 @@ pub fn render(
     queue_clear(out)?;
 
     while remaining_rows > 0 {
-        if let Some(view) = docs.line(global) {
-            let rows = render_line(
-                out,
-                docs,
-                engine,
-                config,
-                &view,
-                screen.width as usize,
-                line_number_width,
-            )?;
+        if let Some(view) = ctx.docs.line(global) {
+            let rows = render_line(out, ctx, &view, screen.width as usize, line_number_width)?;
             remaining_rows = remaining_rows.saturating_sub(rows);
             global += 1;
         } else {
@@ -93,16 +90,8 @@ pub fn render(
         }
     }
 
-    if config.status_bar {
-        render_status(
-            out,
-            screen,
-            prompt.unwrap_or(status),
-            status,
-            top_line,
-            docs,
-            config,
-        )?;
+    if ctx.config.status_bar {
+        render_status(out, screen, ctx, prompt.unwrap_or(status), status, top_line)?;
     }
 
     out.flush()?;
@@ -117,30 +106,36 @@ fn queue_clear(out: &mut impl Write) -> Result<()> {
 fn render_status(
     out: &mut impl Write,
     screen: ScreenSize,
+    ctx: &RenderContext<'_>,
     prompt: &str,
     status: &str,
     top_line: usize,
-    docs: &DocumentSet,
-    config: &Config,
 ) -> Result<()> {
     let y = screen.height.saturating_sub(1);
     execute!(out, MoveTo(0, y), Clear(ClearType::CurrentLine))?;
-    let current = docs.line(top_line);
+    let current = ctx.docs.line(top_line);
     let mut left = String::new();
     if let Some(view) = current {
         let kind = if view.header { "header" } else { "line" };
-        let total = docs.line_count().max(1);
+        let total = ctx.docs.line_count().max(1);
         let percent = ((top_line + 1) * 100 / total).min(100);
         left = format!(
             "{} {} / {} [{}%] {}",
-            docs.document(view.doc)
+            ctx.docs
+                .document(view.doc)
                 .map(|d| d.name.as_str())
                 .unwrap_or("<stdin>"),
             view.local_line + 1,
-            docs.document(view.doc).map(|d| d.line_count()).unwrap_or(0),
+            ctx.docs
+                .document(view.doc)
+                .map(|d| d.line_count())
+                .unwrap_or(0),
             percent,
             kind
         );
+        if ctx.horizontal_offset > 0 {
+            left.push_str(&format!(" col {}", ctx.horizontal_offset + 1));
+        }
     }
     let composed = if prompt.is_empty() {
         if status.is_empty() {
@@ -158,15 +153,12 @@ fn render_status(
     let width = screen.width as usize;
     line = truncate_to_width(&line, width);
     write!(out, "\x1b[7m{:<width$}\x1b[0m", line, width = width)?;
-    let _ = config;
     Ok(())
 }
 
 fn render_line(
     out: &mut impl Write,
-    docs: &DocumentSet,
-    engine: &SyntaxEngine,
-    config: &Config,
+    ctx: &RenderContext<'_>,
     view: &LineView<'_>,
     width: usize,
     line_number_width: usize,
@@ -179,20 +171,21 @@ fn render_line(
                 ..TextStyle::default()
             },
         }]
-    } else if config.raw_control_chars {
+    } else if ctx.config.raw_control_chars {
         vec![StyledSpan {
             text: view.text.to_string(),
             style: TextStyle::default(),
         }]
     } else if view.bytes.contains(&0x1b) {
-        engine.parse_ansi_line(&view.text)
-    } else if config.highlight {
-        engine.highlight_line(&docs.docs[view.doc].syntax, &view.text)
+        ctx.engine.parse_ansi_line(&view.text)
+    } else if ctx.config.highlight {
+        ctx.engine
+            .highlight_line(&ctx.docs.docs[view.doc].syntax, &view.text)
     } else {
         vec![StyledSpan::plain(view.text.to_string())]
     };
 
-    if config.line_numbers && !view.header {
+    if ctx.config.line_numbers && !view.header {
         let prefix = format!(
             "{:>width$} ",
             view.local_line + 1,
@@ -203,7 +196,7 @@ fn render_line(
         spans.insert(0, StyledSpan::plain(String::new()));
     }
 
-    let rows = paint_spans(out, &spans, width, config)?;
+    let rows = paint_spans(out, &spans, width, ctx.config, ctx.horizontal_offset)?;
     if rows == 0 {
         writeln!(out)?;
         return Ok(1);
@@ -212,6 +205,20 @@ fn render_line(
 }
 
 fn paint_spans(
+    out: &mut impl Write,
+    spans: &[StyledSpan],
+    width: usize,
+    config: &Config,
+    horizontal_offset: usize,
+) -> Result<usize> {
+    if config.chop_long_lines {
+        return paint_spans_chopped(out, spans, width, config, horizontal_offset);
+    }
+
+    paint_spans_wrapped(out, spans, width, config)
+}
+
+fn paint_spans_wrapped(
     out: &mut impl Write,
     spans: &[StyledSpan],
     width: usize,
@@ -253,6 +260,63 @@ fn paint_spans(
         write!(out, "\x1b[0m")?;
     }
     Ok(rows)
+}
+
+fn paint_spans_chopped(
+    out: &mut impl Write,
+    spans: &[StyledSpan],
+    width: usize,
+    config: &Config,
+    horizontal_offset: usize,
+) -> Result<usize> {
+    let mut current_style = TextStyle::default();
+    let mut logical_col = 0usize;
+    let mut visible_col = 0usize;
+
+    for span in spans {
+        let mut span_started = false;
+        for ch in span.text.chars() {
+            let rendered = render_char(ch, logical_col, config);
+            let rendered_width = UnicodeWidthStr::width(rendered.as_str());
+            let start_col = logical_col;
+            logical_col += rendered_width;
+
+            if start_col + rendered_width <= horizontal_offset {
+                continue;
+            }
+            if start_col < horizontal_offset {
+                continue;
+            }
+
+            if width > 0 && visible_col + rendered_width > width {
+                if !current_style.eq(&TextStyle::default()) {
+                    write!(out, "\x1b[0m")?;
+                }
+                return Ok(1);
+            }
+
+            if !span_started {
+                if span.style != current_style {
+                    if !current_style.eq(&TextStyle::default()) {
+                        write!(out, "\x1b[0m")?;
+                    }
+                    if !span.style.eq(&TextStyle::default()) {
+                        write!(out, "{}", span.style.to_ansi_prefix())?;
+                    }
+                    current_style = span.style;
+                }
+                span_started = true;
+            }
+
+            write!(out, "{}", rendered)?;
+            visible_col += rendered_width;
+        }
+    }
+
+    if !current_style.eq(&TextStyle::default()) {
+        write!(out, "\x1b[0m")?;
+    }
+    Ok(1)
 }
 
 fn render_char(ch: char, col: usize, config: &Config) -> String {
@@ -313,16 +377,13 @@ mod tests {
 
         let mut highlighted = Vec::new();
         let highlighted_config = Config::default();
-        render_line(
-            &mut highlighted,
-            &docs,
-            &engine,
-            &highlighted_config,
-            &view,
-            80,
-            0,
-        )
-        .unwrap();
+        let highlighted_ctx = RenderContext {
+            docs: &docs,
+            config: &highlighted_config,
+            engine: &engine,
+            horizontal_offset: 0,
+        };
+        render_line(&mut highlighted, &highlighted_ctx, &view, 80, 0).unwrap();
         let highlighted = String::from_utf8(highlighted).unwrap();
         assert!(highlighted.contains("\u{1b}["));
 
@@ -331,7 +392,41 @@ mod tests {
             highlight: false,
             ..Config::default()
         };
-        render_line(&mut plain, &docs, &engine, &plain_config, &view, 80, 0).unwrap();
+        let plain_ctx = RenderContext {
+            docs: &docs,
+            config: &plain_config,
+            engine: &engine,
+            horizontal_offset: 0,
+        };
+        render_line(&mut plain, &plain_ctx, &view, 80, 0).unwrap();
         assert_eq!(String::from_utf8(plain).unwrap(), "fn main() {}");
+    }
+
+    #[test]
+    fn horizontal_offset_clips_chopped_lines_without_losing_style() {
+        let tmp = Builder::new().suffix(".txt").tempfile().unwrap();
+        std::fs::write(tmp.path(), "\u{1b}[31mabcdef\u{1b}[0m\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let engine = SyntaxEngine::new(&Config::default().theme).unwrap();
+        let view = docs.line(0).unwrap();
+        let config = Config {
+            chop_long_lines: true,
+            highlight: false,
+            ..Config::default()
+        };
+        let ctx = RenderContext {
+            docs: &docs,
+            config: &config,
+            engine: &engine,
+            horizontal_offset: 2,
+        };
+
+        let mut out = Vec::new();
+        render_line(&mut out, &ctx, &view, 3, 0).unwrap();
+        let rendered = String::from_utf8(out).unwrap();
+        assert!(rendered.contains("\u{1b}[38;2;128;0;0m"));
+        assert!(rendered.contains("cde"));
+        assert!(rendered.ends_with("\u{1b}[0m"));
     }
 }

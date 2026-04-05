@@ -15,3 +15,8 @@
 - Less-style startup commands are easiest to support by peeling leading `+...` args before file loading; keep explicit `-p/--pattern` as the final startup action so it still wins when both forms are present.
 - Caching line-number width in `DocumentSet` avoids rescanning every redraw and keeps `render` focused on presentation instead of layout bookkeeping.
 - Display-affecting line filtering belongs in `DocumentSet`, not the renderer: `-s/--squeeze-blank-lines` should collapse visible blank runs before search and navigation math sees them, and less-style control keys can reuse the existing motion helpers.
+- Numeric motion prefixes are easiest to support with a small buffered count in the pager; consume it on the next command and keep absolute jumps like `g`/`G` separate from relative motions.
+- Marking the last visible line works best with a pure screen-tail helper that accounts for status-bar height and wrapped rows, not by reusing the file-bottom helper.
+- Keep `r` as a compatibility alias if you add less-style `R` reload behavior; it avoids breaking existing muscle memory while still matching the pager convention better.
+- Startup-command parsing is cleaner and faster when it scans the leading prefix once and uses `split_off` instead of repeated `remove(0)`; keep the parser on `&Path` so the API stays slice-oriented.
+- Horizontal scrolling is easiest to keep correct when the renderer owns the clipping logic; for chopped lines, preserve style emission only when the first visible character for a span reaches the screen, and keep pager state limited to the column offset plus key bindings.

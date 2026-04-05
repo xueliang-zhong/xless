@@ -44,6 +44,7 @@ editor = "vim"
 
 Non-SGR escape sequences are stripped rather than executed, which keeps terminal control traffic from leaking through by accident.
 When raw control mode is off, xless also ignores ANSI scaffolding for screen-fit and row-based scrolling so `-F`, `f`, `b`, `d`, and `u` follow what is visibly rendered.
+If `chop_long_lines` is enabled, left/right arrow keys pan horizontally across the chopped view and `Home` snaps back to the left edge.
 
 ## CLI Overrides
 

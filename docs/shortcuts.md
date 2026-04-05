@@ -11,6 +11,7 @@
 - `m`, `M`, `'` set and jump to a line mark.
 - `v` open the current file in the configured editor.
 - `r`, `R` reload the current file from disk.
+- `Left` and `Right` pan across chopped long lines, and `Home` returns to the start of the line.
 - `h` show the built-in help hint.
 - `Ctrl-E` and `Ctrl-Y` move a single line down or up; `Ctrl-F` / `Ctrl-B` page forward or back; `Ctrl-D` / `Ctrl-U` move by half pages.
 

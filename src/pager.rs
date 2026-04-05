@@ -11,7 +11,7 @@ use crossterm::terminal;
 use crate::config::Config;
 use crate::document::DocumentSet;
 use crate::highlight::SyntaxEngine;
-use crate::render::{TerminalSession, render};
+use crate::render::{RenderContext, TerminalSession, render};
 use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +28,7 @@ pub struct Pager {
     engine: SyntaxEngine,
     startup: Vec<StartupCommand>,
     top_line: usize,
+    horizontal_offset: usize,
     count_buffer: String,
     prompt: PromptMode,
     status: String,
@@ -67,6 +68,7 @@ impl Pager {
             engine,
             startup,
             top_line: 0,
+            horizontal_offset: 0,
             count_buffer: String::new(),
             prompt: PromptMode::Normal,
             status: String::new(),
@@ -81,15 +83,13 @@ impl Pager {
         let _term = TerminalSession::enter(self.config.no_init)?;
         if self.config.quit_if_one_screen && self.fits_screen()? {
             let mut out = io::stdout();
-            render(
-                &mut out,
-                &self.docs,
-                &self.config,
-                &self.engine,
-                self.top_line,
-                None,
-                "",
-            )?;
+            let ctx = RenderContext {
+                docs: &self.docs,
+                config: &self.config,
+                engine: &self.engine,
+                horizontal_offset: self.horizontal_offset,
+            };
+            render(&mut out, &ctx, self.top_line, None, "")?;
             return Ok(());
         }
         let mut out = io::stdout();
@@ -112,15 +112,13 @@ impl Pager {
                 }),
                 PromptMode::Help => Some(HELP_TEXT),
             };
-            render(
-                &mut out,
-                &self.docs,
-                &self.config,
-                &self.engine,
-                self.top_line,
-                prompt,
-                &self.status,
-            )?;
+            let ctx = RenderContext {
+                docs: &self.docs,
+                config: &self.config,
+                engine: &self.engine,
+                horizontal_offset: self.horizontal_offset,
+            };
+            render(&mut out, &ctx, self.top_line, prompt, &self.status)?;
 
             if self.quit {
                 break;
@@ -260,6 +258,9 @@ impl Pager {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.page_up_half_count(count)
             }
+            KeyCode::Right => self.scroll_right_count(count),
+            KeyCode::Left => self.scroll_left_count(count),
+            KeyCode::Home => self.reset_horizontal_offset(),
             KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll(count.unwrap_or(1)),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_up(count.unwrap_or(1)),
             KeyCode::Char('f') | KeyCode::PageDown | KeyCode::Char(' ') => {
@@ -556,6 +557,37 @@ impl Pager {
         } else {
             self.page_up_half();
         }
+    }
+
+    fn scroll_right_count(&mut self, count: Option<usize>) {
+        let step = self.horizontal_step().saturating_mul(count.unwrap_or(1));
+        self.scroll_right(step);
+    }
+
+    fn scroll_left_count(&mut self, count: Option<usize>) {
+        let step = self.horizontal_step().saturating_mul(count.unwrap_or(1));
+        self.scroll_left(step);
+    }
+
+    fn horizontal_step(&self) -> usize {
+        let (width, _) = terminal::size().unwrap_or((80, 24));
+        usize::max(1, width as usize / 2)
+    }
+
+    fn scroll_right(&mut self, cols: usize) {
+        if self.config.chop_long_lines {
+            self.horizontal_offset = self.horizontal_offset.saturating_add(cols);
+        }
+    }
+
+    fn scroll_left(&mut self, cols: usize) {
+        if self.config.chop_long_lines {
+            self.horizontal_offset = self.horizontal_offset.saturating_sub(cols);
+        }
+    }
+
+    fn reset_horizontal_offset(&mut self) {
+        self.horizontal_offset = 0;
     }
 
     fn bottom(&mut self) {
@@ -1050,6 +1082,22 @@ mod tests {
             .handle_normal_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL))
             .unwrap();
         assert_eq!(pager.top_line, 0);
+    }
+
+    #[test]
+    fn horizontal_scroll_only_changes_offset_in_chop_mode() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager.config.chop_long_lines = true;
+        pager.scroll_right(12);
+        assert_eq!(pager.horizontal_offset, 12);
+        pager.scroll_left(5);
+        assert_eq!(pager.horizontal_offset, 7);
+        pager.reset_horizontal_offset();
+        assert_eq!(pager.horizontal_offset, 0);
+
+        pager.config.chop_long_lines = false;
+        pager.scroll_right(40);
+        assert_eq!(pager.horizontal_offset, 0);
     }
 
     #[test]
