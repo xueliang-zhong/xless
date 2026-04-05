@@ -27,4 +27,5 @@
 - Multi-file jumps are easiest to keep predictable when `DocumentSet` exposes helpers for the first visible line of each document and the pager routes `:n` / `:p` through a separate command prompt instead of search state.
 - Less-style line filtering is easiest to keep maintainable when the pager rebuilds a filtered `DocumentSet` view from the original documents and remaps `top_line` after both filter changes and reloads, so follow mode and cursor context stay anchored to the same logical line.
 - Less-style shell escapes are safest when they run behind a raw-mode guard, accept shell-style quoting, and pass current file/line context through env vars instead of interpolating it into the command string.
+- `!` shell prompts should invoke a real shell, not just parse words, if you want pipelines, redirects, and globbing to work like `bash` and `zsh`.
 - If an accepted alias matters to users, make it visible in CLI help and mirror it in README/docs; hidden aliases are easy to forget even when the parser already accepts them.
