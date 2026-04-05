@@ -144,6 +144,7 @@ impl Pager {
                 width as usize,
                 self.config.chop_long_lines,
                 self.config.tab_width,
+                self.config.raw_control_chars,
             );
             rows += line_rows.max(1);
             if rows > limit {
@@ -452,13 +453,24 @@ fn command_from_string(cmd: &str) -> Result<Command> {
     Ok(command)
 }
 
-fn estimate_rows(text: &str, width: usize, chop: bool, tab_width: usize) -> usize {
+fn estimate_rows(
+    text: &str,
+    width: usize,
+    chop: bool,
+    tab_width: usize,
+    raw_control_chars: bool,
+) -> usize {
     if width == 0 {
         return 1;
     }
     let mut rows = 1usize;
     let mut col = 0usize;
-    for ch in text.chars() {
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if !raw_control_chars && ch == '\u{1b}' {
+            skip_ansi_escape(&mut chars);
+            continue;
+        }
         let rendered = if ch == '\t' {
             let spaces = tab_width.max(1) - (col % tab_width.max(1));
             spaces
@@ -479,6 +491,36 @@ fn estimate_rows(text: &str, width: usize, chop: bool, tab_width: usize) -> usiz
     rows
 }
 
+fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    match chars.peek().copied() {
+        Some('[') => {
+            chars.next();
+            while let Some(next) = chars.next() {
+                if ('@'..='~').contains(&next) {
+                    break;
+                }
+            }
+        }
+        Some(']') | Some('P') | Some('_') | Some('^') | Some('X') => {
+            chars.next();
+            let mut saw_escape = false;
+            while let Some(next) = chars.next() {
+                if next == '\u{7}' {
+                    break;
+                }
+                if saw_escape && next == '\\' {
+                    break;
+                }
+                saw_escape = next == '\u{1b}';
+            }
+        }
+        Some(_) => {
+            chars.next();
+        }
+        None => {}
+    }
+}
+
 fn advance_lines(
     docs: &DocumentSet,
     start: usize,
@@ -490,7 +532,13 @@ fn advance_lines(
     let mut idx = start;
     while idx < docs.line_count() && rows < steps {
         if let Some(view) = docs.line(idx) {
-            rows += estimate_rows(&view.text, width, config.chop_long_lines, config.tab_width);
+            rows += estimate_rows(
+                &view.text,
+                width,
+                config.chop_long_lines,
+                config.tab_width,
+                config.raw_control_chars,
+            );
         }
         idx += 1;
     }
@@ -510,7 +558,13 @@ fn rewind_lines(
     while idx > 0 && rows < steps {
         idx -= 1;
         if let Some(view) = docs.line(idx) {
-            rows += estimate_rows(&view.text, width, config.chop_long_lines, config.tab_width);
+            rows += estimate_rows(
+                &view.text,
+                width,
+                config.chop_long_lines,
+                config.tab_width,
+                config.raw_control_chars,
+            );
         }
     }
     idx
@@ -557,6 +611,13 @@ mod tests {
         let docs = sample_set();
         assert_eq!(advance_lines(&docs, 0, 1, 80, &Config::default()), 0);
         assert_eq!(rewind_lines(&docs, 1, 1, 80, &Config::default()), 0);
+    }
+
+    #[test]
+    fn row_estimation_ignores_ansi_sequences_when_not_raw() {
+        let text = "\u{1b}[31mab\u{1b}[0mcd";
+        assert_eq!(estimate_rows(text, 3, false, 4, false), 2);
+        assert!(estimate_rows(text, 3, false, 4, true) > 2);
     }
 
     #[test]

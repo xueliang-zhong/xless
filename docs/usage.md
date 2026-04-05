@@ -41,6 +41,7 @@ xcat src/lib.rs | xless
 - `git diff --color=always | xless` preserves SGR colors while still allowing xless to render syntax and status information.
 - `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
+- Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
 - `-p` / `--pattern` starts the pager on the first matching line before you begin interacting with it.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
 - The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.

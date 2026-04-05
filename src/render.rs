@@ -4,6 +4,7 @@ use anyhow::Result;
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
+use unicode_width::UnicodeWidthChar;
 use unicode_width::UnicodeWidthStr;
 
 use crate::config::Config;
@@ -19,17 +20,19 @@ pub struct ScreenSize {
 
 pub struct TerminalSession {
     active: bool,
+    alternate_screen: bool,
 }
 
 impl TerminalSession {
     pub fn enter(no_init: bool) -> Result<Self> {
+        terminal::enable_raw_mode()?;
         if !no_init {
-            terminal::enable_raw_mode()?;
             execute!(io::stdout(), EnterAlternateScreen, Hide)?;
-        } else {
-            terminal::enable_raw_mode()?;
         }
-        Ok(Self { active: true })
+        Ok(Self {
+            active: true,
+            alternate_screen: !no_init,
+        })
     }
 }
 
@@ -37,7 +40,9 @@ impl Drop for TerminalSession {
     fn drop(&mut self) {
         if self.active {
             let _ = terminal::disable_raw_mode();
-            let _ = execute!(io::stdout(), Show, LeaveAlternateScreen);
+            if self.alternate_screen {
+                let _ = execute!(io::stdout(), Show, LeaveAlternateScreen);
+            }
         }
     }
 }
@@ -158,9 +163,7 @@ fn render_status(
         line.push_str("xless");
     }
     let width = screen.width as usize;
-    if UnicodeWidthStr::width(line.as_str()) > width {
-        line.truncate(width);
-    }
+    line = truncate_to_width(&line, width);
     write!(out, "\x1b[7m{:<width$}\x1b[0m", line, width = width)?;
     let _ = config;
     Ok(())
@@ -273,4 +276,33 @@ fn render_char(ch: char, col: usize, config: &Config) -> String {
         };
     }
     ch.to_string()
+}
+
+fn truncate_to_width(text: &str, width: usize) -> String {
+    if UnicodeWidthStr::width(text) <= width {
+        return text.to_owned();
+    }
+
+    let mut out = String::new();
+    let mut used = 0usize;
+    for ch in text.chars() {
+        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if used + ch_width > width {
+            break;
+        }
+        out.push(ch);
+        used += ch_width;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncates_without_breaking_utf8_boundaries() {
+        assert_eq!(truncate_to_width("xéy", 2), "xé");
+        assert_eq!(truncate_to_width("hello", 3), "hel");
+    }
 }

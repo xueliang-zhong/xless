@@ -41,6 +41,7 @@ editor = "vim"
 `xless` keeps ANSI SGR sequences by default when they appear in tool output. That includes standard 8-color sequences, bright variants, 256-color indexes, and truecolor foreground/background settings.
 
 Non-SGR escape sequences are stripped rather than executed, which keeps terminal control traffic from leaking through by accident.
+When raw control mode is off, xless also ignores ANSI scaffolding for screen-fit and row-based scrolling so `-F`, `f`, `b`, `d`, and `u` follow what is visibly rendered.
 
 ## CLI Overrides
 
