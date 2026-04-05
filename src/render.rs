@@ -91,7 +91,7 @@ pub fn render(
     }
 
     if ctx.config.status_bar {
-        render_status(out, screen, ctx, prompt.unwrap_or(status), status, top_line)?;
+        render_status(out, screen, ctx, prompt.unwrap_or(""), status, top_line)?;
     }
 
     out.flush()?;
@@ -113,9 +113,28 @@ fn render_status(
 ) -> Result<()> {
     let y = screen.height.saturating_sub(1);
     execute!(out, MoveTo(0, y), Clear(ClearType::CurrentLine))?;
-    let current = ctx.docs.line(top_line);
+    let mut line = compose_status_text(ctx, prompt, status, top_line);
+    if line.is_empty() {
+        line.push_str("xless");
+    }
+    let width = screen.width as usize;
+    line = truncate_to_width(&line, width);
+    write!(out, "\x1b[7m{:<width$}\x1b[0m", line, width = width)?;
+    Ok(())
+}
+
+fn compose_status_text(
+    ctx: &RenderContext<'_>,
+    prompt: &str,
+    status: &str,
+    top_line: usize,
+) -> String {
+    if !prompt.is_empty() {
+        return prompt.to_string();
+    }
+
     let mut left = String::new();
-    if let Some(view) = current {
+    if let Some(view) = ctx.docs.line(top_line) {
         let kind = if view.header { "header" } else { "line" };
         let total = ctx.docs.line_count().max(1);
         let percent = ((top_line + 1) * 100 / total).min(100);
@@ -137,23 +156,14 @@ fn render_status(
             left.push_str(&format!(" col {}", ctx.horizontal_offset + 1));
         }
     }
-    let composed = if prompt.is_empty() {
-        if status.is_empty() {
-            left
-        } else {
-            format!("{} {}", left, status)
-        }
+
+    if status.is_empty() {
+        left
+    } else if left.is_empty() {
+        status.to_string()
     } else {
-        prompt.to_string()
-    };
-    let mut line = composed;
-    if line.is_empty() {
-        line.push_str("xless");
+        format!("{} {}", left, status)
     }
-    let width = screen.width as usize;
-    line = truncate_to_width(&line, width);
-    write!(out, "\x1b[7m{:<width$}\x1b[0m", line, width = width)?;
-    Ok(())
 }
 
 fn render_line(
@@ -428,5 +438,24 @@ mod tests {
         assert!(rendered.contains("\u{1b}[38;2;128;0;0m"));
         assert!(rendered.contains("cde"));
         assert!(rendered.ends_with("\u{1b}[0m"));
+    }
+
+    #[test]
+    fn status_line_keeps_context_when_status_message_is_present() {
+        let tmp = Builder::new().suffix(".rs").tempfile().unwrap();
+        std::fs::write(tmp.path(), "fn main() {}\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let engine = SyntaxEngine::new(&Config::default().theme).unwrap();
+        let ctx = RenderContext {
+            docs: &docs,
+            config: &Config::default(),
+            engine: &engine,
+            horizontal_offset: 0,
+        };
+
+        let line = compose_status_text(&ctx, "", "pattern not found", 0);
+        assert!(line.contains(tmp.path().file_name().unwrap().to_string_lossy().as_ref()));
+        assert!(line.contains("pattern not found"));
     }
 }

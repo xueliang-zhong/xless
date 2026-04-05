@@ -148,7 +148,7 @@ impl Pager {
         for command in startup {
             match command {
                 StartupCommand::Pattern { pattern, backward } => {
-                    self.perform_search(&pattern, backward)?;
+                    self.perform_startup_search(&pattern, backward)?;
                 }
                 StartupCommand::Line(line) => {
                     self.top_line = line
@@ -378,6 +378,19 @@ impl Pager {
     }
 
     fn perform_search(&mut self, pattern: &str, backward: bool) -> Result<()> {
+        self.perform_search_with_origin(pattern, backward, false)
+    }
+
+    fn perform_startup_search(&mut self, pattern: &str, backward: bool) -> Result<()> {
+        self.perform_search_with_origin(pattern, backward, true)
+    }
+
+    fn perform_search_with_origin(
+        &mut self,
+        pattern: &str,
+        backward: bool,
+        include_current_line: bool,
+    ) -> Result<()> {
         if pattern.is_empty() {
             return Ok(());
         }
@@ -385,7 +398,7 @@ impl Pager {
             .engine
             .search_regex(pattern, self.config.ignore_case)
             .context("search")?;
-        let found = self.locate_match(&regex, backward);
+        let found = self.locate_match(&regex, backward, include_current_line);
         if let Some(line) = found {
             self.top_line = line;
         } else {
@@ -408,7 +421,12 @@ impl Pager {
         regex.is_match(bytes.as_ref())
     }
 
-    fn locate_match(&self, regex: &regex::bytes::Regex, backward: bool) -> Option<usize> {
+    fn locate_match(
+        &self,
+        regex: &regex::bytes::Regex,
+        backward: bool,
+        include_current_line: bool,
+    ) -> Option<usize> {
         if backward {
             self.find_previous_match(regex, self.top_line, false)
                 .or_else(|| {
@@ -419,7 +437,7 @@ impl Pager {
                     }
                 })
         } else {
-            self.find_forward_match(regex, self.top_line, false)
+            self.find_forward_match(regex, self.top_line, include_current_line)
                 .or_else(|| {
                     if self.config.wrap_search {
                         self.find_forward_match(regex, 0, true)
@@ -488,7 +506,7 @@ impl Pager {
             } else {
                 state.backward
             };
-            let found = self.locate_match(&state.regex, target_backward);
+            let found = self.locate_match(&state.regex, target_backward, false);
             if let Some(line) = found {
                 self.top_line = line;
             } else {
@@ -1032,6 +1050,22 @@ mod tests {
         )
         .unwrap();
         assert!(pager.apply_startup_commands().is_err());
+    }
+
+    #[test]
+    fn startup_pattern_matches_the_first_line() {
+        let mut pager = Pager::new(
+            Config::default(),
+            sample_set(),
+            vec![StartupCommand::Pattern {
+                pattern: "alpha".to_string(),
+                backward: false,
+            }],
+        )
+        .unwrap();
+        pager.apply_startup_commands().unwrap();
+        assert_eq!(pager.top_line, 0);
+        assert!(pager.status.is_empty());
     }
 
     #[test]
