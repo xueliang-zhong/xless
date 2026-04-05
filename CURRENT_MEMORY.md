@@ -11,6 +11,7 @@
 - Screen-fit and row-based motion need to ignore ANSI scaffolding as well, or colored `git`/`xcat` output will miscount rows even when search already works on visible text.
 - Bottom-of-file navigation should select the first line of the last visible screenful, not pin the final line at the top; scanning backward from the tail is the simplest less-like approach.
 - Config fields can drift out of sync with the renderer; `highlight` now gates syntax coloring explicitly, while ANSI color pass-through remains separate.
+- When a renderer already consumes a config knob, expose it through the CLI rather than inventing a second layout path; the `tab_width` option now flows through `-x` / `--tabs`.
 - Syntax-color tests need a recognizable file suffix, otherwise syntect will fall back to plain text and hide renderer regressions.
 - Less-style startup commands are easiest to support by peeling leading `+...` args before file loading; keep explicit `-p/--pattern` as the final startup action so it still wins when both forms are present.
 - Caching line-number width in `DocumentSet` avoids rescanning every redraw and keeps `render` focused on presentation instead of layout bookkeeping.

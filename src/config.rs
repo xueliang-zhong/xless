@@ -101,6 +101,9 @@ impl Config {
         if args.chop_long_lines {
             self.chop_long_lines = true;
         }
+        if let Some(tab_width) = args.tab_width {
+            self.tab_width = tab_width.max(1);
+        }
         if args.squeeze_blank_lines {
             self.squeeze_blank_lines = true;
         }

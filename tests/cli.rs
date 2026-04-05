@@ -22,3 +22,14 @@ fn accepts_less_style_raw_control_alias() {
         .success()
         .stdout(contains("raw_control_chars = true"));
 }
+
+#[test]
+fn applies_less_style_tab_width_override() {
+    let mut cmd = Command::cargo_bin("xless").unwrap();
+    cmd.arg("--dump-config")
+        .arg("-x")
+        .arg("8")
+        .assert()
+        .success()
+        .stdout(contains("tab_width = 8"));
+}

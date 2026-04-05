@@ -9,6 +9,12 @@ xless src/main.rs
 xless Cargo.toml README.md
 ```
 
+Set tab stops explicitly when you are reading tabbed output from tools such as `git` or `xcat`:
+
+```bash
+xless -x 8 src/main.rs
+```
+
 Start at the first match for a startup pattern:
 
 ```bash
@@ -60,6 +66,7 @@ xcat src/lib.rs | xless
 - `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
 - `-i` keeps less-style case rules, while `-I` forces case-insensitive search even if the pattern contains uppercase letters.
+- `-x` / `--tabs` changes the tab stop width used for rendering and row accounting.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
 - When `-S` / `--chop-long-lines` is active, left/right arrows let you pan across long lines without losing ANSI colors or syntax highlighting.
 - `--no-highlight` is useful when you want raw source text without syntax coloring, while still keeping ANSI colors from upstream tools.

@@ -30,6 +30,9 @@ pub struct Args {
     #[arg(short = 'S', long = "chop-long-lines")]
     pub chop_long_lines: bool,
 
+    #[arg(short = 'x', long = "tabs", value_name = "WIDTH")]
+    pub tab_width: Option<usize>,
+
     #[arg(short = 's', long = "squeeze-blank-lines")]
     pub squeeze_blank_lines: bool,
 

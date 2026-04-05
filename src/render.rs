@@ -441,6 +441,17 @@ mod tests {
     }
 
     #[test]
+    fn tab_width_controls_tab_expansion() {
+        let config = Config {
+            tab_width: 8,
+            ..Config::default()
+        };
+
+        assert_eq!(render_char('\t', 1, &config), "       ");
+        assert_eq!(render_char('\t', 8, &config), "        ");
+    }
+
+    #[test]
     fn status_line_keeps_context_when_status_message_is_present() {
         let tmp = Builder::new().suffix(".rs").tempfile().unwrap();
         std::fs::write(tmp.path(), "fn main() {}\n").unwrap();

@@ -36,7 +36,7 @@ editor = "vim"
 - `wrap_search`: search wraps from end to start and vice versa.
 - `highlight`: enable syntax highlighting.
 - `status_bar`: show a status bar.
-- `tab_width`: tab stop width.
+- `tab_width`: tab stop width. Override it on the command line with `-x` or `--tabs`.
 - `theme`: syntect theme name.
 - `editor`: editor command used by the `v` key. It is parsed with shell-style quoting, so values such as `nvim -u 'NORC profile'` work as expected.
 
@@ -61,6 +61,12 @@ To force plain rendering without syntax highlighting:
 
 ```bash
 xless --no-highlight src/main.rs
+```
+
+To override tab stops for the current run:
+
+```bash
+xless -x 8 src/main.rs
 ```
 
 To inspect the merged configuration without opening the pager:
