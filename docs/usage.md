@@ -43,6 +43,7 @@ xcat src/lib.rs | xless
 - `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
+- `--no-highlight` is useful when you want raw source text without syntax coloring, while still keeping ANSI colors from upstream tools.
 - `-p` / `--pattern` starts the pager on the first matching line before you begin interacting with it.
 - `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.
 - `m` and `'` give you a fast return point when you are comparing code, logs, or filtered `fzf` output.

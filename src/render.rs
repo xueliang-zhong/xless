@@ -193,8 +193,10 @@ fn render_line(
         }]
     } else if view.bytes.contains(&0x1b) {
         engine.parse_ansi_line(&view.text)
-    } else {
+    } else if config.highlight {
         engine.highlight_line(&docs.docs[view.doc].syntax, &view.text)
+    } else {
+        vec![StyledSpan::plain(view.text.to_string())]
     };
 
     if config.line_numbers && !view.header {
@@ -299,10 +301,42 @@ fn truncate_to_width(text: &str, width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::Builder;
 
     #[test]
     fn truncates_without_breaking_utf8_boundaries() {
         assert_eq!(truncate_to_width("xéy", 2), "xé");
         assert_eq!(truncate_to_width("hello", 3), "hel");
+    }
+
+    #[test]
+    fn highlight_toggle_controls_syntax_coloring_only() {
+        let tmp = Builder::new().suffix(".rs").tempfile().unwrap();
+        std::fs::write(tmp.path(), "fn main() {}\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let engine = SyntaxEngine::new(&Config::default().theme).unwrap();
+        let view = docs.line(0).unwrap();
+
+        let mut highlighted = Vec::new();
+        let highlighted_config = Config::default();
+        render_line(
+            &mut highlighted,
+            &docs,
+            &engine,
+            &highlighted_config,
+            &view,
+            80,
+            0,
+        )
+        .unwrap();
+        let highlighted = String::from_utf8(highlighted).unwrap();
+        assert!(highlighted.contains("\u{1b}["));
+
+        let mut plain = Vec::new();
+        let mut plain_config = Config::default();
+        plain_config.highlight = false;
+        render_line(&mut plain, &docs, &engine, &plain_config, &view, 80, 0).unwrap();
+        assert_eq!(String::from_utf8(plain).unwrap(), "fn main() {}");
     }
 }

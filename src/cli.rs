@@ -48,6 +48,12 @@ pub struct Args {
     #[arg(long = "theme")]
     pub theme: Option<String>,
 
+    #[arg(long = "highlight")]
+    pub highlight: bool,
+
+    #[arg(long = "no-highlight")]
+    pub no_highlight: bool,
+
     #[arg(long = "config")]
     pub config_path: Option<PathBuf>,
 

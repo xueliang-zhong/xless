@@ -10,3 +10,5 @@
 - Backward wrap search must scan from the end of the file backward; ascending wrap scans can land on the wrong match.
 - Screen-fit and row-based motion need to ignore ANSI scaffolding as well, or colored `git`/`xcat` output will miscount rows even when search already works on visible text.
 - Bottom-of-file navigation should select the first line of the last visible screenful, not pin the final line at the top; scanning backward from the tail is the simplest less-like approach.
+- Config fields can drift out of sync with the renderer; `highlight` now gates syntax coloring explicitly, while ANSI color pass-through remains separate.
+- Syntax-color tests need a recognizable file suffix, otherwise syntect will fall back to plain text and hide renderer regressions.

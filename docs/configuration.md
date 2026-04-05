@@ -35,6 +35,7 @@ editor = "vim"
 - `tab_width`: tab stop width.
 - `theme`: syntect theme name.
 - `editor`: editor command used by the `v` key. It is parsed with shell-style quoting, so values such as `nvim -u 'NORC profile'` work as expected.
+- `highlight`: enable syntax highlighting for plain source text. ANSI color sequences from tools like `git` and `xcat` still pass through unless `raw_control_chars = true`.
 
 ## Color Handling
 
@@ -49,6 +50,12 @@ Command-line flags override config file values:
 
 ```bash
 xless --line-numbers --theme InspiredGitHub src/main.rs
+```
+
+To force plain rendering without syntax highlighting:
+
+```bash
+xless --no-highlight src/main.rs
 ```
 
 To inspect the merged configuration without opening the pager:

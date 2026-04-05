@@ -113,6 +113,12 @@ impl Config {
         if let Some(theme) = &args.theme {
             self.theme = theme.clone();
         }
+        if args.highlight {
+            self.highlight = true;
+        }
+        if args.no_highlight {
+            self.highlight = false;
+        }
     }
 
     fn merge_file(&mut self, file: ConfigFile) {
