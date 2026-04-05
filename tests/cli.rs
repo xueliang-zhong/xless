@@ -33,3 +33,9 @@ fn applies_less_style_tab_width_override() {
         .success()
         .stdout(contains("tab_width = 8"));
 }
+
+#[test]
+fn help_shows_the_raw_control_alias() {
+    let mut cmd = Command::cargo_bin("xless").unwrap();
+    cmd.arg("--help").assert().success().stdout(contains("-r"));
+}

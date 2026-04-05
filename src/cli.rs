@@ -21,7 +21,12 @@ pub struct Args {
     #[arg(short = 'N', long = "line-numbers")]
     pub line_numbers: bool,
 
-    #[arg(short = 'R', short_alias = 'r', long = "raw-control-chars")]
+    #[arg(
+        short = 'R',
+        short_alias = 'r',
+        visible_short_alias = 'r',
+        long = "raw-control-chars"
+    )]
     pub raw_control_chars: bool,
 
     #[arg(short = 'I', long = "ignore-case-always")]

@@ -1,0 +1,1 @@
+- Automated tty smoke via `script -qfec "printf q | cargo run --quiet -- <file>" /dev/null` did not reliably feed the pager stdin; keep pty smoke tests manual or use a purpose-built harness instead.

@@ -1,8 +1,8 @@
 # xless
 
-`xless` is a Rust pager with less-style navigation, safe ANSI color pass-through, horizontal scrolling for chopped lines, mark/jump navigation, multi-file jumps, blank-line squeezing, shell escape commands, configurable tab stops, and syntax highlighting for common source files.
+`xless` is a Rust pager with less-style navigation, safe ANSI color pass-through, horizontal scrolling for chopped lines, mark/jump navigation, multi-file jumps, blank-line squeezing, shell escapes, configurable tab stops, and syntax highlighting for common source files.
 
-Use it for code review, `git diff`, log browsing, and quick file inspection:
+Use it for code review, `git diff`, log browsing, and quick file inspection.
 
 ```bash
 cargo run -- src/main.rs

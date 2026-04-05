@@ -42,3 +42,7 @@ timestamp_utc	generation	status	commit	note
 2026-04-05T18:28:52Z	16	committed	26703db881aca61949bec32940c6c2d331b6c62a	HEAD advanced
 2026-04-05T18:33:33Z	gen17	success	3b305e5	Add less-style line filtering with rebuildable views and tty smoke test
 2026-04-05T18:33:33Z	17	committed	3b305e5	HEAD advanced
+2026-04-05T18:34:19Z	17	committed	3620695629175d455d9cc4b577b5d95aa95267f6	HEAD advanced
+2026-04-05T18:38:25Z	gen18	success	4c13eff1e6652a2320d15eb9e5e75a6979df9729	Add less-style shell command escape with tty-safe execution
+2026-04-05T18:38:25Z	18	committed	4c13eff1e6652a2320d15eb9e5e75a6979df9729	HEAD advanced
+2026-04-05T18:38:47Z	18	committed	4c13eff1e6652a2320d15eb9e5e75a6979df9729	HEAD advanced
