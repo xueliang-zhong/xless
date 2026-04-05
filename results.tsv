@@ -11,3 +11,6 @@ timestamp_utc	generation	status	commit	note
 2026-04-05T17:38:09Z	gen05	success	7a0fe14	ANSI-aware row math, visible-width status truncation, and alt-screen cleanup hardening
 2026-04-05T17:38:36Z	5	committed	3d2859c8251c81d524d978a8cb3758e23454fb85	HEAD advanced
 2026-04-05T17:41:29Z	gen06	success	5d0c8ce	Add less-style marks and bottom-page navigation
+2026-04-05T17:42:34Z	6	committed	c0011cf6a181d1bb15a664e50cede340adc41382	HEAD advanced
+2026-04-05T17:45:32Z	gen07	success	13022c3	Respect highlight config in renderer
+2026-04-05T17:45:32Z	7	committed	13022c3	HEAD advanced
