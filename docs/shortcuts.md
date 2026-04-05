@@ -10,7 +10,7 @@
 - `&` filters the current view to matching lines; submit an empty pattern to clear the filter.
 - `n`, `N` repeat the last search.
 - `:` opens a command prompt; use `:n` and `:p` to move to the next or previous file in a multi-file session.
-- `!` opens a shell-command prompt for quick `git`, `xcat`, or ad-hoc commands.
+- `!` opens a shell-command prompt for quick `git`, `xcat`, or ad-hoc commands. It runs through your shell, so pipes, redirects, and globbing work naturally.
 - `m`, `M`, `'` set and jump to a line mark.
 - `v` open the current file in the configured editor.
 - `r`, `R` reload the current file from disk.

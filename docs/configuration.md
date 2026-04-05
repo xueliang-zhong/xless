@@ -48,6 +48,7 @@ Non-SGR escape sequences are stripped rather than executed, which keeps terminal
 When raw control mode is off, xless also ignores ANSI scaffolding for screen-fit and row-based scrolling so `-F`, `f`, `b`, `d`, and `u` follow what is visibly rendered.
 Use `-r` or `-R` to pass raw control characters through as well; `-r` matches the less spelling and `-R` is kept as a compatibility alias.
 If `chop_long_lines` is enabled, left/right arrow keys pan horizontally across the chopped view and `Home` snaps back to the left edge.
+Shell commands launched from `!` use your shell, so pipelines, redirects, and globbing behave as expected on `bash` and `zsh`.
 
 ## CLI Overrides
 

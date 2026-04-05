@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::env;
 use std::io;
 use std::path::PathBuf;
 use std::process::Command;
@@ -988,7 +989,7 @@ impl Pager {
             return;
         }
         let _guard = RawModeGuard;
-        let mut shell_command = match command_from_string_with_default(command, None) {
+        let mut shell_command = match shell_command_from_string(command) {
             Ok(command) => command,
             Err(err) => {
                 self.status = err.to_string();
@@ -1047,6 +1048,29 @@ fn command_from_string_with_default(cmd: &str, default_program: Option<&str>) ->
         command.arg(part);
     }
     Ok(command)
+}
+
+fn shell_command_from_string(cmd: &str) -> Result<Command> {
+    #[cfg(unix)]
+    {
+        let shell = env::var_os("SHELL").filter(|value| !value.is_empty());
+        let mut command = Command::new(shell.unwrap_or_else(|| "/bin/sh".into()));
+        command.arg("-c").arg(cmd);
+        return Ok(command);
+    }
+
+    #[cfg(windows)]
+    {
+        let shell = env::var_os("COMSPEC").filter(|value| !value.is_empty());
+        let mut command = Command::new(shell.unwrap_or_else(|| "cmd.exe".into()));
+        command.arg("/C").arg(cmd);
+        return Ok(command);
+    }
+
+    #[allow(unreachable_code)]
+    Err(anyhow::anyhow!(
+        "shell command execution is not supported on this platform"
+    ))
 }
 
 fn apply_command_context(command: &mut Command, context: &CommandContext) {
@@ -1584,6 +1608,30 @@ printf '%s|%s|%s|%s' "$XLESS_FILE" "$XLESS_PATH" "$XLESS_LINE" "$XLESS_GLOBAL_LI
             captured,
             format!("{}|{}|2|2", input.display(), input.display())
         );
+        assert!(pager.status.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_commands_support_shell_redirection_and_expansion() {
+        let tmp = tempfile::tempdir().unwrap();
+        let output = tmp.path().join("shell-output.txt");
+        let input = tmp.path().join("input.txt");
+        std::fs::write(&input, "alpha\nbeta\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(std::slice::from_ref(&input), &Config::default()).unwrap();
+        let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
+        pager.top_line = 1;
+
+        pager
+            .execute_command(&format!(
+                "!printf '%s|%s' \"$XLESS_FILE\" \"$XLESS_LINE\" > {}",
+                output.display()
+            ))
+            .unwrap();
+
+        let captured = std::fs::read_to_string(output).unwrap();
+        assert_eq!(captured, format!("{}|2", input.display()));
         assert!(pager.status.is_empty());
     }
 
