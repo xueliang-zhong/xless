@@ -1,6 +1,6 @@
 # xless
 
-`xless` is a Rust pager with less-style navigation, default-safe ANSI color pass-through, and syntax highlighting for common source files.
+`xless` is a Rust pager with less-style navigation, safe ANSI color pass-through, and syntax highlighting for common source files.
 
 Use it for code review, `git diff`, log browsing, and quick file inspection:
 
@@ -12,9 +12,8 @@ git diff --color=always | cargo run --
 Key features:
 
 - Syntax highlighting for recognized file types.
-- Safe ANSI color support by default for tool output like `git` and `xcat`.
+- Safe ANSI color support by default for tool output like `git`, `xcat`, and `less -R` output, including 16-color, 256-color, and truecolor SGR sequences.
 - Less-style navigation, incremental search, and editor handoff.
 - Configuration via `~/.xless/config.toml`.
 
 See `docs/usage.md` for examples, `docs/configuration.md` for config options, and `docs/shortcuts.md` for key bindings.
-

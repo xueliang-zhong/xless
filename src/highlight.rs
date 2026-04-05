@@ -78,11 +78,7 @@ impl SyntaxEngine {
         self.ps.find_syntax_by_token(&candidate)
     }
 
-    pub fn highlight_line(
-        &self,
-        choice: &SyntaxChoice,
-        line: &str,
-    ) -> Vec<StyledSpan> {
+    pub fn highlight_line(&self, choice: &SyntaxChoice, line: &str) -> Vec<StyledSpan> {
         match choice {
             SyntaxChoice::Plain => vec![StyledSpan::plain(line)],
             SyntaxChoice::Named(name) => {
@@ -102,13 +98,22 @@ impl SyntaxEngine {
             for (style, text) in ranges {
                 let mut span_style = TextStyle::default();
                 span_style.fg = Some(style.foreground.into());
-                if style.font_style.contains(syntect::highlighting::FontStyle::BOLD) {
+                if style
+                    .font_style
+                    .contains(syntect::highlighting::FontStyle::BOLD)
+                {
                     span_style.bold = true;
                 }
-                if style.font_style.contains(syntect::highlighting::FontStyle::ITALIC) {
+                if style
+                    .font_style
+                    .contains(syntect::highlighting::FontStyle::ITALIC)
+                {
                     span_style.italic = true;
                 }
-                if style.font_style.contains(syntect::highlighting::FontStyle::UNDERLINE) {
+                if style
+                    .font_style
+                    .contains(syntect::highlighting::FontStyle::UNDERLINE)
+                {
                     span_style.underline = true;
                 }
                 spans.push(StyledSpan {
@@ -127,33 +132,37 @@ impl SyntaxEngine {
         let mut buf = String::new();
         let mut chars = line.chars().peekable();
         while let Some(ch) = chars.next() {
-            if ch == '\u{1b}' && chars.peek() == Some(&'[') {
-                chars.next();
-                if !buf.is_empty() {
-                    spans.push(StyledSpan {
-                        text: std::mem::take(&mut buf),
-                        style: current,
-                    });
-                }
-                let mut params = String::new();
-                while let Some(next) = chars.next() {
-                    if next == 'm' {
-                        self.apply_sgr(&mut current, &params);
-                        break;
+            if ch == '\u{1b}' {
+                match chars.peek().copied() {
+                    Some('[') => {
+                        chars.next();
+                        push_span(&mut spans, &mut buf, current);
+                        let mut params = String::new();
+                        let mut final_byte = None;
+                        while let Some(next) = chars.next() {
+                            if ('@'..='~').contains(&next) {
+                                final_byte = Some(next);
+                                break;
+                            }
+                            params.push(next);
+                        }
+                        if final_byte == Some('m') {
+                            self.apply_sgr(&mut current, &params);
+                        }
                     }
-                    if next.is_ascii_alphanumeric() || next == ';' {
-                        params.push(next);
-                    } else {
-                        break;
+                    Some(']') | Some('P') | Some('_') | Some('^') | Some('X') => {
+                        chars.next();
+                        push_span(&mut spans, &mut buf, current);
+                        skip_escape_string(&mut chars);
                     }
+                    Some(_) => {
+                        chars.next();
+                        push_span(&mut spans, &mut buf, current);
+                    }
+                    None => {}
                 }
             } else if ch.is_control() && ch != '\n' && ch != '\t' {
-                if !buf.is_empty() {
-                    spans.push(StyledSpan {
-                        text: std::mem::take(&mut buf),
-                        style: current,
-                    });
-                }
+                push_span(&mut spans, &mut buf, current);
                 spans.push(StyledSpan {
                     text: caret_repr(ch),
                     style: current,
@@ -162,9 +171,7 @@ impl SyntaxEngine {
                 buf.push(ch);
             }
         }
-        if !buf.is_empty() {
-            spans.push(StyledSpan { text: buf, style: current });
-        }
+        push_span(&mut spans, &mut buf, current);
         if spans.is_empty() {
             spans.push(StyledSpan::plain(String::new()));
         }
@@ -172,43 +179,78 @@ impl SyntaxEngine {
     }
 
     fn apply_sgr(&self, current: &mut TextStyle, params: &str) {
-        if params.is_empty() || params == "0" {
+        if params.is_empty() {
             *current = TextStyle::default();
             return;
         }
-        let mut it = params.split(';').peekable();
-        while let Some(code) = it.next() {
+
+        let mut codes = params.split(';').peekable();
+        while let Some(code) = codes.next() {
+            let Ok(code) = code.parse::<u16>() else {
+                continue;
+            };
             match code {
-                "1" => current.bold = true,
-                "2" => current.dim = true,
-                "3" => current.italic = true,
-                "4" => current.underline = true,
-                "7" => current.reverse = true,
-                "22" => {
+                0 => *current = TextStyle::default(),
+                1 => current.bold = true,
+                2 => current.dim = true,
+                3 => current.italic = true,
+                4 => current.underline = true,
+                7 => current.reverse = true,
+                22 => {
                     current.bold = false;
                     current.dim = false;
                 }
-                "23" => current.italic = false,
-                "24" => current.underline = false,
-                "27" => current.reverse = false,
-                "30" => current.fg = Some(Rgb { r: 0, g: 0, b: 0 }),
-                "31" => current.fg = Some(Rgb { r: 205, g: 49, b: 49 }),
-                "32" => current.fg = Some(Rgb { r: 13, g: 188, b: 121 }),
-                "33" => current.fg = Some(Rgb { r: 229, g: 229, b: 16 }),
-                "34" => current.fg = Some(Rgb { r: 36, g: 114, b: 200 }),
-                "35" => current.fg = Some(Rgb { r: 188, g: 63, b: 188 }),
-                "36" => current.fg = Some(Rgb { r: 17, g: 168, b: 205 }),
-                "37" => current.fg = Some(Rgb { r: 229, g: 229, b: 229 }),
-                "39" => current.fg = None,
-                "40" => current.bg = Some(Rgb { r: 0, g: 0, b: 0 }),
-                "41" => current.bg = Some(Rgb { r: 205, g: 49, b: 49 }),
-                "42" => current.bg = Some(Rgb { r: 13, g: 188, b: 121 }),
-                "43" => current.bg = Some(Rgb { r: 229, g: 229, b: 16 }),
-                "44" => current.bg = Some(Rgb { r: 36, g: 114, b: 200 }),
-                "45" => current.bg = Some(Rgb { r: 188, g: 63, b: 188 }),
-                "46" => current.bg = Some(Rgb { r: 17, g: 168, b: 205 }),
-                "47" => current.bg = Some(Rgb { r: 229, g: 229, b: 229 }),
-                "49" => current.bg = None,
+                23 => current.italic = false,
+                24 => current.underline = false,
+                27 => current.reverse = false,
+                30..=37 => current.fg = Some(Rgb::from_ansi_index((code - 30) as u8)),
+                39 => current.fg = None,
+                40..=47 => current.bg = Some(Rgb::from_ansi_index((code - 40) as u8)),
+                49 => current.bg = None,
+                90..=97 => current.fg = Some(Rgb::from_ansi_index((code - 90 + 8) as u8)),
+                100..=107 => current.bg = Some(Rgb::from_ansi_index((code - 100 + 8) as u8)),
+                38 | 48 => {
+                    let is_fg = code == 38;
+                    let Some(mode) = codes.next() else {
+                        break;
+                    };
+                    let Ok(mode) = mode.parse::<u16>() else {
+                        continue;
+                    };
+                    match mode {
+                        5 => {
+                            let Some(index) = codes.next() else {
+                                break;
+                            };
+                            if let Ok(index) = index.parse::<u8>() {
+                                let color = Rgb::from_ansi_index(index);
+                                if is_fg {
+                                    current.fg = Some(color);
+                                } else {
+                                    current.bg = Some(color);
+                                }
+                            }
+                        }
+                        2 => {
+                            let (Some(r), Some(g), Some(b)) =
+                                (codes.next(), codes.next(), codes.next())
+                            else {
+                                break;
+                            };
+                            if let (Ok(r), Ok(g), Ok(b)) =
+                                (r.parse::<u8>(), g.parse::<u8>(), b.parse::<u8>())
+                            {
+                                let color = Rgb::new(r, g, b);
+                                if is_fg {
+                                    current.fg = Some(color);
+                                } else {
+                                    current.bg = Some(color);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
@@ -224,12 +266,35 @@ impl SyntaxEngine {
     }
 }
 
+fn push_span(spans: &mut Vec<StyledSpan>, buf: &mut String, style: TextStyle) {
+    if !buf.is_empty() {
+        spans.push(StyledSpan {
+            text: std::mem::take(buf),
+            style,
+        });
+    }
+}
+
+fn skip_escape_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    let mut saw_escape = false;
+    while let Some(next) = chars.next() {
+        if next == '\u{7}' {
+            return;
+        }
+        if saw_escape && next == '\\' {
+            return;
+        }
+        saw_escape = next == '\u{1b}';
+    }
+}
+
 fn caret_repr(ch: char) -> String {
-    let byte = ch as u32 as u8;
-    if byte == 0x7f {
+    if ch == '\u{7f}' {
         "^?".to_string()
+    } else if ch.is_ascii_control() {
+        format!("^{}", ((ch as u8 & 0x1f) + 0x40) as char)
     } else {
-        format!("^{}", ((byte & 0x1f) + 0x40) as char)
+        format!("\\u{{{:x}}}", ch as u32)
     }
 }
 
@@ -243,5 +308,26 @@ mod tests {
         let spans = engine.parse_ansi_line("\u{1b}[31mred\u{1b}[0m plain");
         assert!(spans.iter().any(|s| s.style.fg.is_some()));
         assert!(spans.iter().any(|s| s.text.contains("plain")));
+    }
+
+    #[test]
+    fn parses_extended_colors_and_strips_escape_sequences() {
+        let engine = SyntaxEngine::new("base16-ocean.dark").unwrap();
+        let spans = engine.parse_ansi_line(
+            "\u{1b}[38;5;196mred\u{1b}[0m \u{1b}[38;2;1;2;3mblue\u{1b}[0m \u{1b}]8;;https://example.com\u{7}link\u{1b}]8;;\u{7}",
+        );
+        assert_eq!(spans[0].text, "red");
+        assert_eq!(spans[0].style.fg, Some(Rgb::from_ansi_index(196)));
+        assert!(
+            spans
+                .iter()
+                .any(|span| span.text == "blue" && span.style.fg == Some(Rgb::new(1, 2, 3)))
+        );
+        assert!(spans.iter().any(|span| span.text == "link"));
+        assert!(
+            spans
+                .iter()
+                .all(|span| !span.text.contains("https://example.com"))
+        );
     }
 }

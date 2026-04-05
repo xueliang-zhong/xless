@@ -188,9 +188,7 @@ impl Document {
 
     pub fn from_stdin(config: &Config, engine: &SyntaxEngine) -> Result<Self> {
         let mut buf = Vec::new();
-        io::stdin()
-            .read_to_end(&mut buf)
-            .context("reading stdin")?;
+        io::stdin().read_to_end(&mut buf).context("reading stdin")?;
         Ok(Self::from_backing(
             "<stdin>".to_string(),
             None,

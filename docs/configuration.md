@@ -34,7 +34,13 @@ editor = "vim"
 - `status_bar`: show a status bar.
 - `tab_width`: tab stop width.
 - `theme`: syntect theme name.
-- `editor`: editor command used by the `v` key.
+- `editor`: editor command used by the `v` key. It is parsed with shell-style quoting, so values such as `nvim -u 'NORC profile'` work as expected.
+
+## Color Handling
+
+`xless` keeps ANSI SGR sequences by default when they appear in tool output. That includes standard 8-color sequences, bright variants, 256-color indexes, and truecolor foreground/background settings.
+
+Non-SGR escape sequences are stripped rather than executed, which keeps terminal control traffic from leaking through by accident.
 
 ## CLI Overrides
 
@@ -49,4 +55,3 @@ To inspect the merged configuration without opening the pager:
 ```bash
 xless --dump-config
 ```
-

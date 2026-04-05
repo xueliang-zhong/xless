@@ -6,4 +6,3 @@ pub mod pager;
 pub mod render;
 pub mod style;
 pub mod terminal;
-

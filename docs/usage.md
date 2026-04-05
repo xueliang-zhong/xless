@@ -32,7 +32,9 @@ xcat src/lib.rs | xless
 ## Git, Vim, and fzf
 
 - `git diff --color=always | xless` preserves SGR colors while still allowing xless to render syntax and status information.
+- `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
+- The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.
 - Use xless after filtering with `fzf`, for example:
 
 ```bash
@@ -46,4 +48,3 @@ If you want xless to quit automatically when the content fits on one screen, use
 ```bash
 xless -F file.txt
 ```
-

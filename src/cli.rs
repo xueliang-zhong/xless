@@ -9,7 +9,11 @@ use crate::document::DocumentSet;
 use crate::pager::Pager;
 
 #[derive(Debug, Parser)]
-#[command(name = "xless", version, about = "A fast, color-first pager written in Rust")]
+#[command(
+    name = "xless",
+    version,
+    about = "A fast, color-first pager written in Rust"
+)]
 pub struct Args {
     #[arg(value_name = "FILE")]
     pub files: Vec<PathBuf>,
@@ -59,8 +63,7 @@ pub fn run() -> Result<()> {
     let mut config = if args.no_config {
         Config::default()
     } else {
-        Config::load(args.config_path.as_deref())
-            .context("failed to load xless configuration")?
+        Config::load(args.config_path.as_deref()).context("failed to load xless configuration")?
     };
     config.apply_args(&args);
 

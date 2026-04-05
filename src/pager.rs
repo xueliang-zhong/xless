@@ -9,7 +9,7 @@ use crossterm::terminal;
 use crate::config::Config;
 use crate::document::DocumentSet;
 use crate::highlight::SyntaxEngine;
-use crate::render::{render, TerminalSession};
+use crate::render::{TerminalSession, render};
 use unicode_width::UnicodeWidthChar;
 
 pub struct Pager {
@@ -26,10 +26,7 @@ pub struct Pager {
 #[derive(Debug, Clone)]
 enum PromptMode {
     Normal,
-    Search {
-        input: String,
-        backward: bool,
-    },
+    Search { input: String, backward: bool },
     Help,
 }
 
@@ -121,7 +118,12 @@ impl Pager {
         let mut global = 0usize;
         while global < self.docs.line_count() && rows <= limit {
             let view = self.docs.line(global).context("missing line")?;
-            let line_rows = estimate_rows(&view.text, width as usize, self.config.chop_long_lines, self.config.tab_width);
+            let line_rows = estimate_rows(
+                &view.text,
+                width as usize,
+                self.config.chop_long_lines,
+                self.config.tab_width,
+            );
             rows += line_rows.max(1);
             if rows > limit {
                 return Ok(false);
@@ -166,14 +168,18 @@ impl Pager {
             KeyCode::Char('u') => self.page_up_half(),
             KeyCode::Char('g') => self.top_line = 0,
             KeyCode::Char('G') => self.bottom(),
-            KeyCode::Char('/') => self.prompt = PromptMode::Search {
-                input: String::new(),
-                backward: false,
-            },
-            KeyCode::Char('?') => self.prompt = PromptMode::Search {
-                input: String::new(),
-                backward: true,
-            },
+            KeyCode::Char('/') => {
+                self.prompt = PromptMode::Search {
+                    input: String::new(),
+                    backward: false,
+                }
+            }
+            KeyCode::Char('?') => {
+                self.prompt = PromptMode::Search {
+                    input: String::new(),
+                    backward: true,
+                }
+            }
             KeyCode::Char('n') => self.repeat_search(false)?,
             KeyCode::Char('N') => self.repeat_search(true)?,
             KeyCode::Char('h') => self.prompt = PromptMode::Help,
@@ -269,9 +275,14 @@ impl Pager {
     }
 
     fn repeat_search(&mut self, backward: bool) -> Result<()> {
-        if let Some((pattern, _)) = &self.last_search {
+        if let Some((pattern, last_backward)) = &self.last_search {
             let pattern = pattern.clone();
-            self.perform_search(&pattern, backward)?;
+            let target_backward = if backward {
+                !*last_backward
+            } else {
+                *last_backward
+            };
+            self.perform_search(&pattern, target_backward)?;
         }
         Ok(())
     }
@@ -313,9 +324,21 @@ impl Pager {
         } as usize;
         let steps = ((limit as f64) * fraction).max(1.0) as usize;
         if forward {
-            self.top_line = advance_lines(&self.docs, self.top_line, steps, screen.0 as usize, &self.config);
+            self.top_line = advance_lines(
+                &self.docs,
+                self.top_line,
+                steps,
+                screen.0 as usize,
+                &self.config,
+            );
         } else {
-            self.top_line = rewind_lines(&self.docs, self.top_line, steps, screen.0 as usize, &self.config);
+            self.top_line = rewind_lines(
+                &self.docs,
+                self.top_line,
+                steps,
+                screen.0 as usize,
+                &self.config,
+            );
         }
     }
 
@@ -334,10 +357,10 @@ impl Pager {
             return Ok(());
         };
         terminal::disable_raw_mode()?;
-        let mut editor = command_from_string(&self.config.editor);
+        let _guard = RawModeGuard;
+        let mut editor = command_from_string(&self.config.editor)?;
         editor.arg(format!("+{}", current.local_line + 1)).arg(path);
         let status = editor.status().context("launching editor")?;
-        terminal::enable_raw_mode()?;
         if !status.success() {
             self.status = format!("editor exited with {}", status);
         }
@@ -345,13 +368,23 @@ impl Pager {
     }
 }
 
-fn command_from_string(cmd: &str) -> Command {
-    let mut parts = cmd.split_whitespace();
-    let mut command = Command::new(parts.next().unwrap_or("vim"));
+struct RawModeGuard;
+
+impl Drop for RawModeGuard {
+    fn drop(&mut self) {
+        let _ = terminal::enable_raw_mode();
+    }
+}
+
+fn command_from_string(cmd: &str) -> Result<Command> {
+    let parts =
+        shell_words::split(cmd).with_context(|| format!("parsing editor command {cmd:?}"))?;
+    let mut parts = parts.into_iter();
+    let mut command = Command::new(parts.next().unwrap_or_else(|| "vim".to_string()));
     for part in parts {
         command.arg(part);
     }
-    command
+    Ok(command)
 }
 
 fn estimate_rows(text: &str, width: usize, chop: bool, tab_width: usize) -> usize {
@@ -396,7 +429,8 @@ fn advance_lines(
         }
         idx += 1;
     }
-    idx.saturating_sub(1).min(docs.line_count().saturating_sub(1))
+    idx.saturating_sub(1)
+        .min(docs.line_count().saturating_sub(1))
 }
 
 fn rewind_lines(
@@ -428,17 +462,29 @@ mod tests {
 
     fn sample_set() -> DocumentSet {
         let tmp = NamedTempFile::new().unwrap();
-        std::fs::write(tmp.path(), "alpha\nbeta\ngamma\n").unwrap();
+        std::fs::write(tmp.path(), "alpha\nbeta\ngamma\nbeta\n").unwrap();
         DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap()
     }
 
     #[test]
-    fn search_remembers_last_pattern() {
+    fn search_repeats_follow_original_direction() {
         let mut pager = Pager::new(Config::default(), sample_set()).unwrap();
         pager.perform_search("beta", false).unwrap();
         assert_eq!(pager.top_line, 1);
+        pager.repeat_search(false).unwrap();
+        assert_eq!(pager.top_line, 3);
         pager.repeat_search(true).unwrap();
         assert_eq!(pager.top_line, 1);
+    }
+
+    #[test]
+    fn backward_search_repeats_backward_first() {
+        let mut pager = Pager::new(Config::default(), sample_set()).unwrap();
+        pager.top_line = 3;
+        pager.perform_search("beta", true).unwrap();
+        assert_eq!(pager.top_line, 1);
+        pager.repeat_search(false).unwrap();
+        assert_eq!(pager.top_line, 3);
     }
 
     #[test]
@@ -446,5 +492,16 @@ mod tests {
         let docs = sample_set();
         assert_eq!(advance_lines(&docs, 0, 1, 80, &Config::default()), 0);
         assert_eq!(rewind_lines(&docs, 1, 1, 80, &Config::default()), 0);
+    }
+
+    #[test]
+    fn parses_editor_command_with_quoted_arguments() {
+        let command = command_from_string("nvim -u 'NORC profile'").unwrap();
+        assert_eq!(command.get_program(), "nvim");
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, vec!["-u", "NORC profile"]);
     }
 }

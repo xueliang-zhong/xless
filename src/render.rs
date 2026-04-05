@@ -57,12 +57,13 @@ pub fn render(
     status: &str,
 ) -> Result<()> {
     let screen = size()?;
-    let content_height = screen.height.saturating_sub(if config.status_bar { 1 } else { 0 });
+    let content_height = screen
+        .height
+        .saturating_sub(if config.status_bar { 1 } else { 0 });
     let mut remaining_rows = content_height as usize;
     let mut global = top_line;
     let line_number_width = if config.line_numbers {
-        docs
-            .lines
+        docs.lines
             .iter()
             .filter(|line| !line.header)
             .map(|line| line.local_line + 1)
@@ -134,7 +135,9 @@ fn render_status(
         let percent = ((top_line + 1) * 100 / total).min(100);
         left = format!(
             "{} {} / {} [{}%] {}",
-            docs.document(view.doc).map(|d| d.name.as_str()).unwrap_or("<stdin>"),
+            docs.document(view.doc)
+                .map(|d| d.name.as_str())
+                .unwrap_or("<stdin>"),
             view.local_line + 1,
             docs.document(view.doc).map(|d| d.line_count()).unwrap_or(0),
             percent,
@@ -192,7 +195,11 @@ fn render_line(
     };
 
     if config.line_numbers && !view.header {
-        let prefix = format!("{:>width$} ", view.local_line + 1, width = line_number_width);
+        let prefix = format!(
+            "{:>width$} ",
+            view.local_line + 1,
+            width = line_number_width
+        );
         spans.insert(0, StyledSpan::plain(prefix));
     } else if view.header {
         spans.insert(0, StyledSpan::plain(String::new()));

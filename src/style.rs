@@ -18,6 +18,93 @@ pub struct Rgb {
     pub b: u8,
 }
 
+impl Rgb {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
+
+    pub fn from_ansi_index(index: u8) -> Self {
+        match index {
+            0 => Self { r: 0, g: 0, b: 0 },
+            1 => Self { r: 128, g: 0, b: 0 },
+            2 => Self { r: 0, g: 128, b: 0 },
+            3 => Self {
+                r: 128,
+                g: 128,
+                b: 0,
+            },
+            4 => Self { r: 0, g: 0, b: 128 },
+            5 => Self {
+                r: 128,
+                g: 0,
+                b: 128,
+            },
+            6 => Self {
+                r: 0,
+                g: 128,
+                b: 128,
+            },
+            7 => Self {
+                r: 192,
+                g: 192,
+                b: 192,
+            },
+            8 => Self {
+                r: 128,
+                g: 128,
+                b: 128,
+            },
+            9 => Self { r: 255, g: 0, b: 0 },
+            10 => Self { r: 0, g: 255, b: 0 },
+            11 => Self {
+                r: 255,
+                g: 255,
+                b: 0,
+            },
+            12 => Self { r: 0, g: 0, b: 255 },
+            13 => Self {
+                r: 255,
+                g: 0,
+                b: 255,
+            },
+            14 => Self {
+                r: 0,
+                g: 255,
+                b: 255,
+            },
+            15 => Self {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+            16..=231 => {
+                let idx = index - 16;
+                let cube = |component: u8| match component {
+                    0 => 0,
+                    1 => 95,
+                    2 => 135,
+                    3 => 175,
+                    4 => 215,
+                    _ => 255,
+                };
+                Self {
+                    r: cube(idx / 36),
+                    g: cube((idx / 6) % 6),
+                    b: cube(idx % 6),
+                }
+            }
+            232..=255 => {
+                let value = 8 + (index - 232) * 10;
+                Self {
+                    r: value,
+                    g: value,
+                    b: value,
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StyledSpan {
     pub text: String,
@@ -89,22 +176,61 @@ impl From<Color> for Rgb {
             Color::Black => Self { r: 0, g: 0, b: 0 },
             Color::DarkRed => Self { r: 128, g: 0, b: 0 },
             Color::DarkGreen => Self { r: 0, g: 128, b: 0 },
-            Color::DarkYellow => Self { r: 128, g: 128, b: 0 },
+            Color::DarkYellow => Self {
+                r: 128,
+                g: 128,
+                b: 0,
+            },
             Color::DarkBlue => Self { r: 0, g: 0, b: 128 },
-            Color::DarkMagenta => Self { r: 128, g: 0, b: 128 },
-            Color::DarkCyan => Self { r: 0, g: 128, b: 128 },
-            Color::Grey => Self { r: 192, g: 192, b: 192 },
+            Color::DarkMagenta => Self {
+                r: 128,
+                g: 0,
+                b: 128,
+            },
+            Color::DarkCyan => Self {
+                r: 0,
+                g: 128,
+                b: 128,
+            },
+            Color::Grey => Self {
+                r: 192,
+                g: 192,
+                b: 192,
+            },
             Color::Red => Self { r: 255, g: 0, b: 0 },
             Color::Green => Self { r: 0, g: 255, b: 0 },
-            Color::Yellow => Self { r: 255, g: 255, b: 0 },
+            Color::Yellow => Self {
+                r: 255,
+                g: 255,
+                b: 0,
+            },
             Color::Blue => Self { r: 0, g: 0, b: 255 },
-            Color::Magenta => Self { r: 255, g: 0, b: 255 },
-            Color::Cyan => Self { r: 0, g: 255, b: 255 },
-            Color::White => Self { r: 255, g: 255, b: 255 },
-            Color::DarkGrey => Self { r: 128, g: 128, b: 128 },
-            Color::Reset => Self { r: 255, g: 255, b: 255 },
+            Color::Magenta => Self {
+                r: 255,
+                g: 0,
+                b: 255,
+            },
+            Color::Cyan => Self {
+                r: 0,
+                g: 255,
+                b: 255,
+            },
+            Color::White => Self {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+            Color::DarkGrey => Self {
+                r: 128,
+                g: 128,
+                b: 128,
+            },
+            Color::Reset => Self {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
             Color::AnsiValue(v) => Self { r: v, g: v, b: v },
         }
     }
 }
-

@@ -196,4 +196,3 @@ editor = "nvim"
         assert_eq!(loaded.editor, "nvim");
     }
 }
-
