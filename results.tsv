@@ -39,3 +39,6 @@ timestamp_utc	generation	status	commit	note
 2026-04-05T18:24:59Z	gen15	success	555389a	Add less-style file jumps via command prompt and document helpers
 2026-04-05T18:25:38Z	15	committed	3c24f9a14192724f1a548833b2152d06ecf10158	HEAD advanced
 2026-04-05T18:27:44Z	gen16	success	17aaa8857102e6973a937b13813a21881e094472	Add less-style tab width override
+2026-04-05T18:28:52Z	16	committed	26703db881aca61949bec32940c6c2d331b6c62a	HEAD advanced
+2026-04-05T18:33:33Z	gen17	success	3b305e5	Add less-style line filtering with rebuildable views and tty smoke test
+2026-04-05T18:33:33Z	17	committed	3b305e5	HEAD advanced
