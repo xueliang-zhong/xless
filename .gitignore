@@ -1,4 +1,8 @@
-/target
+/target/*
+!/target/release/
+/target/release/*
+!/target/release/xless
+/.xless-bootstrap-target/
 goal.txt
 psp_codex_*.log
 plan.tmp.*

@@ -38,3 +38,4 @@ make smoke
 - The pager core is split into document loading, syntax highlighting, rendering, and input handling.
 - Syntax highlighting uses `syntect` so common programming and markup languages work out of the box.
 - Files are memory-mapped when possible for better large-file performance; standard input is buffered in memory.
+- `target/release/xless` is a checked-in bootstrap launcher so the board smoke command works from a clean checkout; it builds into `.xless-bootstrap-target/` instead of overwriting itself.
