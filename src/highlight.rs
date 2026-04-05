@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -176,6 +177,59 @@ impl SyntaxEngine {
             spans.push(StyledSpan::plain(String::new()));
         }
         spans
+    }
+
+    pub fn strip_ansi_sequences(bytes: &[u8]) -> Cow<'_, [u8]> {
+        if !bytes.contains(&0x1b) {
+            return Cow::Borrowed(bytes);
+        }
+
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut i = 0usize;
+        while i < bytes.len() {
+            if bytes[i] != 0x1b {
+                out.push(bytes[i]);
+                i += 1;
+                continue;
+            }
+
+            i += 1;
+            if i >= bytes.len() {
+                break;
+            }
+
+            match bytes[i] {
+                b'[' => {
+                    i += 1;
+                    while i < bytes.len() {
+                        let byte = bytes[i];
+                        i += 1;
+                        if (0x40..=0x7e).contains(&byte) {
+                            break;
+                        }
+                    }
+                }
+                b']' | b'P' | b'_' | b'^' | b'X' => {
+                    i += 1;
+                    while i < bytes.len() {
+                        if bytes[i] == 0x07 {
+                            i += 1;
+                            break;
+                        }
+                        if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                            i += 2;
+                            break;
+                        }
+                        i += 1;
+                    }
+                }
+                _ => {
+                    i += 1;
+                }
+            }
+        }
+
+        Cow::Owned(out)
     }
 
     fn apply_sgr(&self, current: &mut TextStyle, params: &str) {

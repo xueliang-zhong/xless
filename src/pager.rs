@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -234,7 +235,7 @@ impl Pager {
         if backward {
             for idx in (0..self.top_line).rev() {
                 if let Some(view) = self.docs.line(idx) {
-                    if regex.is_match(&view.bytes) {
+                    if self.matches_search(&regex, view.bytes.as_ref()) {
                         self.top_line = idx;
                         return Ok(());
                     }
@@ -243,7 +244,7 @@ impl Pager {
             if self.config.wrap_search {
                 for idx in (self.top_line..self.docs.line_count()).rev() {
                     if let Some(view) = self.docs.line(idx) {
-                        if regex.is_match(&view.bytes) {
+                        if self.matches_search(&regex, view.bytes.as_ref()) {
                             self.top_line = idx;
                             return Ok(());
                         }
@@ -253,7 +254,7 @@ impl Pager {
         } else {
             for idx in self.top_line + 1..self.docs.line_count() {
                 if let Some(view) = self.docs.line(idx) {
-                    if regex.is_match(&view.bytes) {
+                    if self.matches_search(&regex, view.bytes.as_ref()) {
                         self.top_line = idx;
                         return Ok(());
                     }
@@ -262,7 +263,7 @@ impl Pager {
             if self.config.wrap_search {
                 for idx in 0..=self.top_line.min(self.docs.line_count().saturating_sub(1)) {
                     if let Some(view) = self.docs.line(idx) {
-                        if regex.is_match(&view.bytes) {
+                        if self.matches_search(&regex, view.bytes.as_ref()) {
                             self.top_line = idx;
                             return Ok(());
                         }
@@ -272,6 +273,15 @@ impl Pager {
         }
         self.status = "pattern not found".to_string();
         Ok(())
+    }
+
+    fn matches_search(&self, regex: &regex::bytes::Regex, bytes: &[u8]) -> bool {
+        let bytes = if self.config.raw_control_chars {
+            Cow::Borrowed(bytes)
+        } else {
+            SyntaxEngine::strip_ansi_sequences(bytes)
+        };
+        regex.is_match(bytes.as_ref())
     }
 
     fn repeat_search(&mut self, backward: bool) -> Result<()> {
@@ -503,5 +513,16 @@ mod tests {
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
         assert_eq!(args, vec!["-u", "NORC profile"]);
+    }
+
+    #[test]
+    fn search_ignores_ansi_sequences_by_default() {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "plain\nab\x1b[31mc\x1b[0md\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let mut pager = Pager::new(Config::default(), docs).unwrap();
+        pager.perform_search("abcd", false).unwrap();
+        assert_eq!(pager.top_line, 1);
     }
 }

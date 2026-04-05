@@ -12,4 +12,4 @@
 - `h` show the built-in help hint.
 
 The pager keeps ANSI SGR colors from tools like `git`, `less -R`, and `xcat` while stripping unsafe terminal control sequences by default.
-
+Search runs over visible text, so `n` and `N` keep working even when the source line contains color escapes.
