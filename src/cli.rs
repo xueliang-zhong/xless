@@ -81,7 +81,7 @@ pub fn run() -> Result<()> {
         DocumentSet::from_paths(&args.files, &config)?
     };
 
-    let mut pager = Pager::new(config, input)?;
+    let mut pager = Pager::new(config, input, args.pattern)?;
     pager.run()?;
     Ok(())
 }
