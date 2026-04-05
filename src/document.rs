@@ -105,6 +105,23 @@ impl DocumentSet {
         self.docs.get(index)
     }
 
+    pub fn document_index_at_line(&self, global_line: usize) -> Option<usize> {
+        self.lines.get(global_line).map(|line_ref| line_ref.doc)
+    }
+
+    pub fn first_line_for_document(&self, doc_index: usize) -> Option<usize> {
+        self.lines
+            .iter()
+            .position(|line_ref| line_ref.doc == doc_index)
+    }
+
+    pub fn first_visible_line_for_document(&self, doc_index: usize) -> Option<usize> {
+        self.lines
+            .iter()
+            .position(|line_ref| line_ref.doc == doc_index && !line_ref.header)
+            .or_else(|| self.first_line_for_document(doc_index))
+    }
+
     pub fn reloaded(&self, config: &Config) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
         let mut docs = Vec::with_capacity(self.docs.len());
@@ -297,6 +314,20 @@ mod tests {
         assert!(set.line(2).unwrap().header);
         assert_eq!(set.line_count(), 4);
         assert_eq!(set.line_number_width(), 1);
+    }
+
+    #[test]
+    fn finds_first_visible_line_for_each_document() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first.rs");
+        let second = tmp.path().join("second.rs");
+        std::fs::write(&first, "fn main() {}\n").unwrap();
+        std::fs::write(&second, "").unwrap();
+        let set = DocumentSet::from_paths(&[first, second], &Config::default()).unwrap();
+
+        assert_eq!(set.first_visible_line_for_document(0), Some(1));
+        assert_eq!(set.first_visible_line_for_document(1), Some(2));
+        assert_eq!(set.document_index_at_line(0), Some(0));
     }
 
     #[test]

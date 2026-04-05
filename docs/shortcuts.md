@@ -8,6 +8,7 @@
 - `g`, `G` jump to the top or bottom.
 - `/`, `?` start forward or backward search.
 - `n`, `N` repeat the last search.
+- `:` opens a command prompt; use `:n` and `:p` to move to the next or previous file in a multi-file session.
 - `m`, `M`, `'` set and jump to a line mark.
 - `v` open the current file in the configured editor.
 - `r`, `R` reload the current file from disk.

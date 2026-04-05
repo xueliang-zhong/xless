@@ -49,6 +49,7 @@ enum PromptMode {
     Normal,
     Search { input: String, backward: bool },
     Mark { action: MarkAction },
+    Command { input: String },
     Help,
 }
 
@@ -109,6 +110,11 @@ impl Pager {
                     MarkAction::SetFirst => "mark: set first",
                     MarkAction::SetLast => "mark: set last",
                     MarkAction::Jump => "mark: jump",
+                }),
+                PromptMode::Command { input } => Some(if input.is_empty() {
+                    ":"
+                } else {
+                    input.as_str()
                 }),
                 PromptMode::Help => Some(HELP_TEXT),
             };
@@ -214,6 +220,14 @@ impl Pager {
                     self.prompt = PromptMode::Mark { action };
                 }
             }
+            PromptMode::Command { mut input } => {
+                let done = self.handle_command_key(key, &mut input)?;
+                if done {
+                    self.prompt = PromptMode::Normal;
+                } else {
+                    self.prompt = PromptMode::Command { input };
+                }
+            }
             PromptMode::Help => {
                 self.prompt = PromptMode::Normal;
             }
@@ -300,6 +314,11 @@ impl Pager {
                     action: MarkAction::SetFirst,
                 }
             }
+            KeyCode::Char(':') => {
+                self.prompt = PromptMode::Command {
+                    input: String::new(),
+                }
+            }
             KeyCode::Char('M') => {
                 self.prompt = PromptMode::Mark {
                     action: MarkAction::SetLast,
@@ -371,6 +390,30 @@ impl Pager {
                     MarkAction::Jump => self.jump_to_mark(c),
                 }
                 return Ok(true);
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    fn handle_command_key(&mut self, key: KeyEvent, input: &mut String) -> Result<bool> {
+        match key.code {
+            KeyCode::Esc => {
+                self.status.clear();
+                return Ok(true);
+            }
+            KeyCode::Enter => {
+                let command = input.clone();
+                self.execute_command(&command)?;
+                return Ok(true);
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            KeyCode::Char(c) => {
+                if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    input.push(c);
+                }
             }
             _ => {}
         }
@@ -670,6 +713,60 @@ impl Pager {
         }
     }
 
+    fn execute_command(&mut self, command: &str) -> Result<()> {
+        let command = command.trim();
+        if command.is_empty() {
+            return Ok(());
+        }
+
+        match command {
+            "n" => self.jump_to_adjacent_file(1),
+            "p" => self.jump_to_adjacent_file(-1),
+            "q" => self.quit = true,
+            _ => {
+                self.status = format!("unknown command :{command}");
+            }
+        }
+        Ok(())
+    }
+
+    fn jump_to_adjacent_file(&mut self, delta: isize) {
+        let Some(current_doc) = self.docs.document_index_at_line(self.top_line) else {
+            self.status = "no current file".to_string();
+            return;
+        };
+
+        let Some(next_doc) = current_doc.checked_add_signed(delta) else {
+            self.status = if delta.is_negative() {
+                "no previous file".to_string()
+            } else {
+                "no next file".to_string()
+            };
+            return;
+        };
+
+        let Some(target_line) = self.docs.first_visible_line_for_document(next_doc) else {
+            self.status = if delta.is_negative() {
+                "no previous file".to_string()
+            } else {
+                "no next file".to_string()
+            };
+            return;
+        };
+
+        self.top_line = target_line;
+        let file_name = self
+            .docs
+            .document(next_doc)
+            .map(|doc| doc.name.as_str())
+            .unwrap_or("<unknown>");
+        self.status = if delta.is_negative() {
+            format!("previous file {file_name}")
+        } else {
+            format!("next file {file_name}")
+        };
+    }
+
     fn take_count(&mut self) -> Option<usize> {
         if self.count_buffer.is_empty() {
             return None;
@@ -850,8 +947,7 @@ fn rewind_lines(
     idx
 }
 
-const HELP_TEXT: &str =
-    "q quit  j/k scroll  f/b page  / search  n/N next/prev  m/M mark  ' jump  v editor  r/R reload";
+const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  n/N next/prev  :n/:p files  m/M mark  ' jump  v editor  r/R reload";
 
 fn bottom_line_for_screen(
     docs: &DocumentSet,
@@ -976,6 +1072,25 @@ mod tests {
         assert_eq!(pager.top_line, 1);
         pager.repeat_search(false).unwrap();
         assert_eq!(pager.top_line, 3);
+    }
+
+    #[test]
+    fn command_prompt_moves_between_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first.rs");
+        let second = tmp.path().join("second.rs");
+        std::fs::write(&first, "alpha\n").unwrap();
+        std::fs::write(&second, "beta\n").unwrap();
+        let docs = DocumentSet::from_paths(&[first, second], &Config::default()).unwrap();
+        let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
+
+        pager.execute_command("n").unwrap();
+        assert_eq!(pager.top_line, 3);
+        assert!(pager.status.contains("next file"));
+
+        pager.execute_command("p").unwrap();
+        assert_eq!(pager.top_line, 1);
+        assert!(pager.status.contains("previous file"));
     }
 
     #[test]
