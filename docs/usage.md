@@ -32,6 +32,7 @@ xcat src/lib.rs | xless
 - `/` search forward.
 - `?` search backward.
 - `n` and `N` repeat the last search.
+- `m` sets a mark and `'` jumps back to it.
 - `v` open the current file in your editor.
 - `r` reload a file from disk.
 - `q` quit.
@@ -43,6 +44,8 @@ xcat src/lib.rs | xless
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
 - `-p` / `--pattern` starts the pager on the first matching line before you begin interacting with it.
+- `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.
+- `m` and `'` give you a fast return point when you are comparing code, logs, or filtered `fzf` output.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
 - The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.
 - Use xless after filtering with `fzf`, for example:

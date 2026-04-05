@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::io;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -22,6 +23,7 @@ pub struct Pager {
     prompt: PromptMode,
     status: String,
     last_search: Option<(String, bool)>,
+    marks: HashMap<char, usize>,
     quit: bool,
 }
 
@@ -29,7 +31,14 @@ pub struct Pager {
 enum PromptMode {
     Normal,
     Search { input: String, backward: bool },
+    Mark { action: MarkAction },
     Help,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MarkAction {
+    Set,
+    Jump,
 }
 
 impl Pager {
@@ -44,6 +53,7 @@ impl Pager {
             prompt: PromptMode::Normal,
             status: String::new(),
             last_search: None,
+            marks: HashMap::new(),
             quit: false,
         })
     }
@@ -77,6 +87,10 @@ impl Pager {
                     };
                     Some(self.status.as_str())
                 }
+                PromptMode::Mark { action } => Some(match action {
+                    MarkAction::Set => "mark: set",
+                    MarkAction::Jump => "mark: jump",
+                }),
                 PromptMode::Help => Some(HELP_TEXT),
             };
             render(
@@ -172,6 +186,14 @@ impl Pager {
                     self.prompt = PromptMode::Search { input, backward };
                 }
             }
+            PromptMode::Mark { action } => {
+                let done = self.handle_mark_key(key, action)?;
+                if done {
+                    self.prompt = PromptMode::Normal;
+                } else {
+                    self.prompt = PromptMode::Mark { action };
+                }
+            }
             PromptMode::Help => {
                 self.prompt = PromptMode::Normal;
             }
@@ -200,6 +222,16 @@ impl Pager {
                 self.prompt = PromptMode::Search {
                     input: String::new(),
                     backward: true,
+                }
+            }
+            KeyCode::Char('m') => {
+                self.prompt = PromptMode::Mark {
+                    action: MarkAction::Set,
+                }
+            }
+            KeyCode::Char('\'') => {
+                self.prompt = PromptMode::Mark {
+                    action: MarkAction::Jump,
                 }
             }
             KeyCode::Char('n') => self.repeat_search(false)?,
@@ -238,6 +270,27 @@ impl Pager {
                 if !key.modifiers.contains(KeyModifiers::CONTROL) {
                     input.push(c);
                 }
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    fn handle_mark_key(&mut self, key: KeyEvent, action: MarkAction) -> Result<bool> {
+        match key.code {
+            KeyCode::Esc => {
+                self.status.clear();
+                return Ok(true);
+            }
+            KeyCode::Char(c) => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    return Ok(false);
+                }
+                match action {
+                    MarkAction::Set => self.set_mark(c),
+                    MarkAction::Jump => self.jump_to_mark(c),
+                }
+                return Ok(true);
             }
             _ => {}
         }
@@ -378,7 +431,13 @@ impl Pager {
     }
 
     fn bottom(&mut self) {
-        self.top_line = self.docs.line_count().saturating_sub(1);
+        let screen = terminal::size().unwrap_or((80, 24));
+        self.top_line = bottom_line_for_screen(
+            &self.docs,
+            screen.0 as usize,
+            screen.1 as usize,
+            &self.config,
+        );
     }
 
     fn scroll_by_rows(&mut self, forward: bool, fraction: f64) {
@@ -413,6 +472,20 @@ impl Pager {
         self.docs = docs;
         self.top_line = self.top_line.min(self.docs.line_count().saturating_sub(1));
         Ok(())
+    }
+
+    fn set_mark(&mut self, mark: char) {
+        self.marks.insert(mark, self.top_line);
+        self.status = format!("set mark {mark}");
+    }
+
+    fn jump_to_mark(&mut self, mark: char) {
+        if let Some(line) = self.marks.get(&mark).copied() {
+            self.top_line = line.min(self.docs.line_count().saturating_sub(1));
+            self.status = format!("jumped to mark {mark}");
+        } else {
+            self.status = format!("mark {mark} not set");
+        }
     }
 
     fn open_in_editor(&mut self) -> Result<()> {
@@ -570,7 +643,53 @@ fn rewind_lines(
     idx
 }
 
-const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  n/N next/prev  v editor  r reload";
+const HELP_TEXT: &str =
+    "q quit  j/k scroll  f/b page  / search  n/N next/prev  m mark  ' jump  v editor  r reload";
+
+fn bottom_line_for_screen(
+    docs: &DocumentSet,
+    width: usize,
+    height: usize,
+    config: &Config,
+) -> usize {
+    if docs.line_count() == 0 {
+        return 0;
+    }
+
+    let limit = if config.status_bar {
+        height.saturating_sub(1)
+    } else {
+        height
+    };
+    if limit == 0 {
+        return docs.line_count().saturating_sub(1);
+    }
+
+    let mut used_rows = 0usize;
+    let mut start = docs.line_count().saturating_sub(1);
+    for idx in (0..docs.line_count()).rev() {
+        let Some(view) = docs.line(idx) else {
+            continue;
+        };
+        let rows = estimate_rows(
+            &view.text,
+            width,
+            config.chop_long_lines,
+            config.tab_width,
+            config.raw_control_chars,
+        )
+        .max(1);
+        if used_rows + rows > limit {
+            break;
+        }
+        used_rows += rows;
+        start = idx;
+        if used_rows == limit {
+            break;
+        }
+    }
+    start
+}
 
 #[cfg(test)]
 mod tests {
@@ -611,6 +730,12 @@ mod tests {
         let docs = sample_set();
         assert_eq!(advance_lines(&docs, 0, 1, 80, &Config::default()), 0);
         assert_eq!(rewind_lines(&docs, 1, 1, 80, &Config::default()), 0);
+    }
+
+    #[test]
+    fn bottom_position_shows_last_screenful() {
+        let docs = sample_set();
+        assert_eq!(bottom_line_for_screen(&docs, 80, 3, &Config::default()), 2);
     }
 
     #[test]
@@ -664,5 +789,23 @@ mod tests {
         let mut pager = Pager::new(config, sample_set(), None).unwrap();
         pager.perform_search("beta", true).unwrap();
         assert_eq!(pager.top_line, 3);
+    }
+
+    #[test]
+    fn marks_jump_back_to_saved_line() {
+        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        pager.top_line = 2;
+        pager.set_mark('a');
+        pager.top_line = 0;
+        pager.jump_to_mark('a');
+        assert_eq!(pager.top_line, 2);
+        assert_eq!(pager.status, "jumped to mark a");
+    }
+
+    #[test]
+    fn missing_mark_sets_status() {
+        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        pager.jump_to_mark('z');
+        assert_eq!(pager.status, "mark z not set");
     }
 }

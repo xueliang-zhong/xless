@@ -9,3 +9,4 @@
 - Startup `-p/--pattern` search should run before raw-mode entry and include the first line, while interactive forward search still skips the current line.
 - Backward wrap search must scan from the end of the file backward; ascending wrap scans can land on the wrong match.
 - Screen-fit and row-based motion need to ignore ANSI scaffolding as well, or colored `git`/`xcat` output will miscount rows even when search already works on visible text.
+- Bottom-of-file navigation should select the first line of the last visible screenful, not pin the final line at the top; scanning backward from the tail is the simplest less-like approach.
