@@ -1,0 +1,4 @@
+/target
+goal.txt
+psp_codex_*.log
+plan.tmp.*

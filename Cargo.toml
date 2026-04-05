@@ -1,0 +1,23 @@
+[package]
+name = "xless"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+crossterm = "0.29"
+directories = "6"
+memmap2 = "0.9"
+once_cell = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+syntect = { version = "5", default-features = false, features = ["parsing", "regex-onig", "default-fancy"] }
+thiserror = "2"
+toml = "0.8"
+unicode-width = "0.2"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
