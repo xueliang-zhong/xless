@@ -42,6 +42,8 @@ git diff --color=always | xless
 xcat src/lib.rs | xless
 ```
 
+Files and piped input are split on LF, CRLF, and bare CR line endings, so mixed-platform output stays readable without manual cleanup.
+
 ## Interactive Controls
 
 - Numeric prefixes like `5j`, `2G`, or `10d` apply to the next motion command.

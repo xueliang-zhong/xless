@@ -309,7 +309,11 @@ impl Pager {
             KeyCode::Right => self.scroll_right_count(count),
             KeyCode::Left => self.scroll_left_count(count),
             KeyCode::Home => self.reset_horizontal_offset(),
-            KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll(count.unwrap_or(1)),
+            KeyCode::Char('j')
+            | KeyCode::Down
+            | KeyCode::Enter
+            | KeyCode::Char('\n')
+            | KeyCode::Char('\r') => self.scroll(count.unwrap_or(1)),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_up(count.unwrap_or(1)),
             KeyCode::Char('f') | KeyCode::PageDown | KeyCode::Char(' ') => {
                 self.page_down_count(count)
@@ -396,7 +400,7 @@ impl Pager {
                 self.status.clear();
                 return Ok(true);
             }
-            KeyCode::Enter => {
+            KeyCode::Enter | KeyCode::Char('\n') | KeyCode::Char('\r') => {
                 let query = input.clone();
                 self.perform_search(&query, backward)?;
                 self.status.clear();
@@ -421,7 +425,7 @@ impl Pager {
                 self.status.clear();
                 return Ok(true);
             }
-            KeyCode::Enter => {
+            KeyCode::Enter | KeyCode::Char('\n') | KeyCode::Char('\r') => {
                 let query = input.clone();
                 self.apply_filter(&query);
                 return Ok(true);
@@ -470,7 +474,7 @@ impl Pager {
                 self.status.clear();
                 return Ok(true);
             }
-            KeyCode::Enter => {
+            KeyCode::Enter | KeyCode::Char('\n') | KeyCode::Char('\r') => {
                 let command = input.clone();
                 self.execute_command(&command)?;
                 return Ok(true);
@@ -1439,6 +1443,35 @@ mod tests {
                 .map(|state| (state.pattern.as_str(), state.backward)),
             Some(("alpha", false))
         );
+    }
+
+    #[test]
+    fn search_prompt_accepts_enter_variants() {
+        let docs = sample_set();
+        let mut pager = Pager::new(Config::default(), docs.clone(), Vec::new()).unwrap();
+        let mut input = String::from("beta");
+
+        let done = pager
+            .handle_search_key(
+                KeyEvent::new(KeyCode::Char('\r'), KeyModifiers::NONE),
+                &mut input,
+                false,
+            )
+            .unwrap();
+        assert!(done);
+        assert_eq!(pager.top_line, 1);
+
+        let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
+        let mut input = String::from("beta");
+        let done = pager
+            .handle_search_key(
+                KeyEvent::new(KeyCode::Char('\n'), KeyModifiers::NONE),
+                &mut input,
+                false,
+            )
+            .unwrap();
+        assert!(done);
+        assert_eq!(pager.top_line, 1);
     }
 
     #[test]

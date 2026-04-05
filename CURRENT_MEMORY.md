@@ -30,3 +30,4 @@
 - `!` shell prompts should invoke a real shell, not just parse words, if you want pipelines, redirects, and globbing to work like `bash` and `zsh`.
 - If an accepted alias matters to users, make it visible in CLI help and mirror it in README/docs; hidden aliases are easy to forget even when the parser already accepts them.
 - If a board expects `./target/release/<bin>` from a clean checkout, a tiny POSIX bootstrap launcher can make that exact path work without committing a real build artifact; keep its `CARGO_TARGET_DIR` separate so it does not overwrite itself.
+- Normalize LF, CRLF, and bare CR line endings once at document load time so search, redraw, and follow-style refresh logic all see the same logical line content; also accept `\r`/`\n` submit variants in prompt handlers because some TTY paths do not surface `KeyCode::Enter` consistently.

@@ -24,6 +24,7 @@ pub struct Document {
     pub syntax: SyntaxChoice,
     backing: Backing,
     line_starts: Vec<usize>,
+    line_ends: Vec<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -267,13 +268,34 @@ impl Document {
     ) -> Self {
         let bytes = backing.as_slice();
         let mut line_starts = Vec::new();
-        if !bytes.is_empty() {
-            line_starts.push(0);
-            for (idx, b) in bytes.iter().enumerate() {
-                if *b == b'\n' && idx + 1 < bytes.len() {
-                    line_starts.push(idx + 1);
+        let mut line_ends = Vec::new();
+        let mut start = 0usize;
+        let mut idx = 0usize;
+        while idx < bytes.len() {
+            match bytes[idx] {
+                b'\n' => {
+                    line_starts.push(start);
+                    line_ends.push(idx);
+                    idx += 1;
+                    start = idx;
+                }
+                b'\r' => {
+                    line_starts.push(start);
+                    line_ends.push(idx);
+                    idx += 1;
+                    if idx < bytes.len() && bytes[idx] == b'\n' {
+                        idx += 1;
+                    }
+                    start = idx;
+                }
+                _ => {
+                    idx += 1;
                 }
             }
+        }
+        if start < bytes.len() {
+            line_starts.push(start);
+            line_ends.push(bytes.len());
         }
         let syntax = engine.detect(&path, bytes, config.language.as_deref());
         Self {
@@ -282,6 +304,7 @@ impl Document {
             syntax,
             backing,
             line_starts,
+            line_ends,
         }
     }
 
@@ -291,13 +314,7 @@ impl Document {
 
     pub fn line_bytes(&self, line: usize) -> Option<&[u8]> {
         let start = *self.line_starts.get(line)?;
-        let end = if line + 1 < self.line_starts.len() {
-            self.line_starts[line + 1].saturating_sub(1)
-        } else if self.backing.as_slice().last() == Some(&b'\n') {
-            self.backing.as_slice().len().saturating_sub(1)
-        } else {
-            self.backing.as_slice().len()
-        };
+        let end = *self.line_ends.get(line)?;
         Some(&self.backing.as_slice()[start..end])
     }
 
@@ -329,6 +346,38 @@ mod tests {
             "demo".to_string(),
             None,
             Backing::Bytes(Arc::from(b"a\nb\n".as_slice())),
+            &config,
+            &engine,
+        );
+        assert_eq!(doc.line_count(), 2);
+        assert_eq!(doc.line_text(0).unwrap(), "a");
+        assert_eq!(doc.line_text(1).unwrap(), "b");
+    }
+
+    #[test]
+    fn splits_crlf_lines_without_leaving_carriage_returns() {
+        let engine = SyntaxEngine::new("base16-ocean.dark").unwrap();
+        let config = Config::default();
+        let doc = Document::from_backing(
+            "demo".to_string(),
+            None,
+            Backing::Bytes(Arc::from(b"a\r\nb\r\n".as_slice())),
+            &config,
+            &engine,
+        );
+        assert_eq!(doc.line_count(), 2);
+        assert_eq!(doc.line_text(0).unwrap(), "a");
+        assert_eq!(doc.line_text(1).unwrap(), "b");
+    }
+
+    #[test]
+    fn splits_bare_carriage_return_lines_without_leaving_carriage_returns() {
+        let engine = SyntaxEngine::new("base16-ocean.dark").unwrap();
+        let config = Config::default();
+        let doc = Document::from_backing(
+            "demo".to_string(),
+            None,
+            Backing::Bytes(Arc::from(b"a\rb\r".as_slice())),
             &config,
             &engine,
         );
