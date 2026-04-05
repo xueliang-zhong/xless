@@ -68,14 +68,7 @@ pub fn render(
     let mut remaining_rows = content_height as usize;
     let mut global = top_line;
     let line_number_width = if config.line_numbers {
-        docs.lines
-            .iter()
-            .filter(|line| !line.header)
-            .map(|line| line.local_line + 1)
-            .max()
-            .unwrap_or(1)
-            .to_string()
-            .len()
+        docs.line_number_width()
     } else {
         0
     };

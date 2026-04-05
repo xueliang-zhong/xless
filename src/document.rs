@@ -14,6 +14,7 @@ use crate::highlight::{SyntaxChoice, SyntaxEngine};
 pub struct DocumentSet {
     pub docs: Vec<Document>,
     pub lines: Vec<LineRef>,
+    line_number_width: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -51,50 +52,26 @@ pub struct LineView<'a> {
 impl DocumentSet {
     pub fn from_paths(paths: &[PathBuf], config: &Config) -> Result<Self> {
         let mut docs = Vec::new();
-        let mut lines = Vec::new();
-        let show_headers = paths.len() > 1;
         let engine = SyntaxEngine::new(&config.theme)?;
         for path in paths {
             let doc = Document::load(path, config, &engine)?;
-            let doc_index = docs.len();
-            if show_headers {
-                lines.push(LineRef {
-                    doc: doc_index,
-                    local_line: 0,
-                    header: true,
-                });
-            }
-            for local_line in 0..doc.line_count() {
-                lines.push(LineRef {
-                    doc: doc_index,
-                    local_line,
-                    header: false,
-                });
-            }
             docs.push(doc);
         }
-        Ok(Self { docs, lines })
+        Ok(Self::from_documents(docs))
     }
 
     pub fn from_stdin(config: &Config) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
         let doc = Document::from_stdin(config, &engine)?;
-        let mut lines = Vec::new();
-        for local_line in 0..doc.line_count() {
-            lines.push(LineRef {
-                doc: 0,
-                local_line,
-                header: false,
-            });
-        }
-        Ok(Self {
-            docs: vec![doc],
-            lines,
-        })
+        Ok(Self::from_documents(vec![doc]))
     }
 
     pub fn line_count(&self) -> usize {
         self.lines.len()
+    }
+
+    pub fn line_number_width(&self) -> usize {
+        self.line_number_width
     }
 
     pub fn line(&self, global_line: usize) -> Option<LineView<'_>> {
@@ -138,6 +115,10 @@ impl DocumentSet {
                 docs.push(doc.clone());
             }
         }
+        Ok(Self::from_documents(docs))
+    }
+
+    fn from_documents(docs: Vec<Document>) -> Self {
         let mut lines = Vec::new();
         let show_headers = docs.len() > 1;
         for (doc_index, doc) in docs.iter().enumerate() {
@@ -156,7 +137,16 @@ impl DocumentSet {
                 });
             }
         }
-        Ok(Self { docs, lines })
+        let line_number_width = docs
+            .iter()
+            .map(|doc| doc.line_count().max(1).to_string().len())
+            .max()
+            .unwrap_or(1);
+        Self {
+            docs,
+            lines,
+            line_number_width,
+        }
     }
 }
 
@@ -288,5 +278,17 @@ mod tests {
         assert!(set.line(0).unwrap().header);
         assert!(set.line(2).unwrap().header);
         assert_eq!(set.line_count(), 4);
+        assert_eq!(set.line_number_width(), 1);
+    }
+
+    #[test]
+    fn tracks_line_number_width_for_longer_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first.rs");
+        let second = tmp.path().join("second.rs");
+        std::fs::write(&first, "a\n").unwrap();
+        std::fs::write(&second, "b\n".repeat(120)).unwrap();
+        let set = DocumentSet::from_paths(&[first, second], &Config::default()).unwrap();
+        assert_eq!(set.line_number_width(), 3);
     }
 }

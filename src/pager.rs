@@ -14,17 +14,32 @@ use crate::highlight::SyntaxEngine;
 use crate::render::{TerminalSession, render};
 use unicode_width::UnicodeWidthChar;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StartupCommand {
+    Pattern { pattern: String, backward: bool },
+    Line(usize),
+    Bottom,
+    Follow,
+}
+
 pub struct Pager {
     config: Config,
     docs: DocumentSet,
     engine: SyntaxEngine,
-    startup_pattern: Option<String>,
+    startup: Vec<StartupCommand>,
     top_line: usize,
     prompt: PromptMode,
     status: String,
-    last_search: Option<(String, bool)>,
+    last_search: Option<SearchState>,
     marks: HashMap<char, usize>,
     quit: bool,
+}
+
+#[derive(Debug)]
+struct SearchState {
+    pattern: String,
+    backward: bool,
+    regex: regex::bytes::Regex,
 }
 
 #[derive(Debug, Clone)]
@@ -42,13 +57,13 @@ enum MarkAction {
 }
 
 impl Pager {
-    pub fn new(config: Config, docs: DocumentSet, startup_pattern: Option<String>) -> Result<Self> {
+    pub fn new(config: Config, docs: DocumentSet, startup: Vec<StartupCommand>) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
         Ok(Self {
             config,
             docs,
             engine,
-            startup_pattern,
+            startup,
             top_line: 0,
             prompt: PromptMode::Normal,
             status: String::new(),
@@ -59,7 +74,7 @@ impl Pager {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        self.apply_startup_pattern()?;
+        self.apply_startup_commands()?;
         let _term = TerminalSession::enter(self.config.no_init)?;
         if self.config.quit_if_one_screen && self.fits_screen()? {
             let mut out = io::stdout();
@@ -126,17 +141,20 @@ impl Pager {
         Ok(())
     }
 
-    fn apply_startup_pattern(&mut self) -> Result<()> {
-        if let Some(pattern) = self.startup_pattern.take() {
-            let regex = self
-                .engine
-                .search_regex(&pattern, self.config.ignore_case)
-                .context("search")?;
-            self.last_search = Some((pattern, false));
-            if let Some(line) = self.find_forward_match(&regex, 0, true) {
-                self.top_line = line;
-            } else {
-                self.status = "pattern not found".to_string();
+    fn apply_startup_commands(&mut self) -> Result<()> {
+        let startup = std::mem::take(&mut self.startup);
+        for command in startup {
+            match command {
+                StartupCommand::Pattern { pattern, backward } => {
+                    self.perform_search(&pattern, backward)?;
+                }
+                StartupCommand::Line(line) => {
+                    self.top_line = line
+                        .saturating_sub(1)
+                        .min(self.docs.line_count().saturating_sub(1));
+                }
+                StartupCommand::Bottom => self.bottom(),
+                StartupCommand::Follow => self.config.follow = true,
             }
         }
         Ok(())
@@ -305,31 +323,17 @@ impl Pager {
             .engine
             .search_regex(pattern, self.config.ignore_case)
             .context("search")?;
-        self.last_search = Some((pattern.to_string(), backward));
-        let found = if backward {
-            self.find_previous_match(&regex, self.top_line, false)
-                .or_else(|| {
-                    if self.config.wrap_search {
-                        self.find_previous_match(&regex, self.docs.line_count(), true)
-                    } else {
-                        None
-                    }
-                })
-        } else {
-            self.find_forward_match(&regex, self.top_line, false)
-                .or_else(|| {
-                    if self.config.wrap_search {
-                        self.find_forward_match(&regex, 0, true)
-                    } else {
-                        None
-                    }
-                })
-        };
+        let found = self.locate_match(&regex, backward);
         if let Some(line) = found {
             self.top_line = line;
         } else {
             self.status = "pattern not found".to_string();
         }
+        self.last_search = Some(SearchState {
+            pattern: pattern.to_string(),
+            backward,
+            regex,
+        });
         Ok(())
     }
 
@@ -340,6 +344,28 @@ impl Pager {
             SyntaxEngine::strip_ansi_sequences(bytes)
         };
         regex.is_match(bytes.as_ref())
+    }
+
+    fn locate_match(&self, regex: &regex::bytes::Regex, backward: bool) -> Option<usize> {
+        if backward {
+            self.find_previous_match(regex, self.top_line, false)
+                .or_else(|| {
+                    if self.config.wrap_search {
+                        self.find_previous_match(regex, self.docs.line_count(), true)
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            self.find_forward_match(regex, self.top_line, false)
+                .or_else(|| {
+                    if self.config.wrap_search {
+                        self.find_forward_match(regex, 0, true)
+                    } else {
+                        None
+                    }
+                })
+        }
     }
 
     fn find_forward_match(
@@ -394,14 +420,23 @@ impl Pager {
     }
 
     fn repeat_search(&mut self, backward: bool) -> Result<()> {
-        if let Some((pattern, last_backward)) = &self.last_search {
-            let pattern = pattern.clone();
+        if let Some(state) = self.last_search.take() {
             let target_backward = if backward {
-                !*last_backward
+                !state.backward
             } else {
-                *last_backward
+                state.backward
             };
-            self.perform_search(&pattern, target_backward)?;
+            let found = self.locate_match(&state.regex, target_backward);
+            if let Some(line) = found {
+                self.top_line = line;
+            } else {
+                self.status = "pattern not found".to_string();
+            }
+            self.last_search = Some(SearchState {
+                pattern: state.pattern,
+                backward: target_backward,
+                regex: state.regex,
+            });
         }
         Ok(())
     }
@@ -706,7 +741,7 @@ mod tests {
 
     #[test]
     fn search_repeats_follow_original_direction() {
-        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.perform_search("beta", false).unwrap();
         assert_eq!(pager.top_line, 1);
         pager.repeat_search(false).unwrap();
@@ -717,7 +752,7 @@ mod tests {
 
     #[test]
     fn backward_search_repeats_backward_first() {
-        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.top_line = 3;
         pager.perform_search("beta", true).unwrap();
         assert_eq!(pager.top_line, 1);
@@ -762,38 +797,59 @@ mod tests {
         std::fs::write(tmp.path(), "plain\nab\x1b[31mc\x1b[0md\n").unwrap();
         let docs =
             DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
-        let mut pager = Pager::new(Config::default(), docs, None).unwrap();
+        let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
         pager.perform_search("abcd", false).unwrap();
         assert_eq!(pager.top_line, 1);
     }
 
     #[test]
-    fn startup_pattern_positions_before_rendering() {
-        let mut pager =
-            Pager::new(Config::default(), sample_set(), Some("alpha".to_string())).unwrap();
-        pager.apply_startup_pattern().unwrap();
+    fn startup_commands_apply_before_rendering() {
+        let mut pager = Pager::new(
+            Config::default(),
+            sample_set(),
+            vec![StartupCommand::Pattern {
+                pattern: "alpha".to_string(),
+                backward: false,
+            }],
+        )
+        .unwrap();
+        pager.apply_startup_commands().unwrap();
         assert_eq!(pager.top_line, 0);
-        assert_eq!(pager.last_search, Some(("alpha".to_string(), false)));
+        assert_eq!(
+            pager
+                .last_search
+                .as_ref()
+                .map(|state| (state.pattern.as_str(), state.backward)),
+            Some(("alpha", false))
+        );
     }
 
     #[test]
     fn startup_pattern_compilation_errors_surface_early() {
-        let mut pager = Pager::new(Config::default(), sample_set(), Some("(".to_string())).unwrap();
-        assert!(pager.apply_startup_pattern().is_err());
+        let mut pager = Pager::new(
+            Config::default(),
+            sample_set(),
+            vec![StartupCommand::Pattern {
+                pattern: "(".to_string(),
+                backward: false,
+            }],
+        )
+        .unwrap();
+        assert!(pager.apply_startup_commands().is_err());
     }
 
     #[test]
     fn backward_search_wraps_to_last_match() {
         let mut config = Config::default();
         config.wrap_search = true;
-        let mut pager = Pager::new(config, sample_set(), None).unwrap();
+        let mut pager = Pager::new(config, sample_set(), Vec::new()).unwrap();
         pager.perform_search("beta", true).unwrap();
         assert_eq!(pager.top_line, 3);
     }
 
     #[test]
     fn marks_jump_back_to_saved_line() {
-        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.top_line = 2;
         pager.set_mark('a');
         pager.top_line = 0;
@@ -804,8 +860,21 @@ mod tests {
 
     #[test]
     fn missing_mark_sets_status() {
-        let mut pager = Pager::new(Config::default(), sample_set(), None).unwrap();
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.jump_to_mark('z');
         assert_eq!(pager.status, "mark z not set");
+    }
+
+    #[test]
+    fn startup_line_and_follow_commands_apply() {
+        let mut pager = Pager::new(
+            Config::default(),
+            sample_set(),
+            vec![StartupCommand::Follow, StartupCommand::Line(3)],
+        )
+        .unwrap();
+        pager.apply_startup_commands().unwrap();
+        assert!(pager.config.follow);
+        assert_eq!(pager.top_line, 2);
     }
 }

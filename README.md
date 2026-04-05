@@ -14,7 +14,7 @@ Key features:
 
 - Syntax highlighting for recognized file types.
 - Safe ANSI color support by default for tool output like `git`, `xcat`, and `less -R` output, including 16-color, 256-color, and truecolor SGR sequences.
-- Less-style navigation, startup search with `-p/--pattern`, incremental search over visible text, mark/jump keys, and editor handoff.
+- Less-style navigation, startup commands like `+42`, `+/pattern`, `+G`, and `+F`, startup search with `-p/--pattern`, incremental search over visible text, mark/jump keys, and editor handoff.
 - Configuration via `~/.xless/config.toml`.
 
 See `docs/usage.md` for examples, `docs/configuration.md` for config options, and `docs/shortcuts.md` for key bindings.
