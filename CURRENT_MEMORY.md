@@ -14,3 +14,4 @@
 - Syntax-color tests need a recognizable file suffix, otherwise syntect will fall back to plain text and hide renderer regressions.
 - Less-style startup commands are easiest to support by peeling leading `+...` args before file loading; keep explicit `-p/--pattern` as the final startup action so it still wins when both forms are present.
 - Caching line-number width in `DocumentSet` avoids rescanning every redraw and keeps `render` focused on presentation instead of layout bookkeeping.
+- Display-affecting line filtering belongs in `DocumentSet`, not the renderer: `-s/--squeeze-blank-lines` should collapse visible blank runs before search and navigation math sees them, and less-style control keys can reuse the existing motion helpers.
