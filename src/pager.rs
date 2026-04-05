@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -60,6 +61,14 @@ enum PromptMode {
     Mark { action: MarkAction },
     Command { input: String },
     Help,
+}
+
+#[derive(Debug, Clone)]
+struct CommandContext {
+    label: String,
+    path: Option<PathBuf>,
+    line: usize,
+    global_line: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -343,6 +352,11 @@ impl Pager {
                     input: String::new(),
                 }
             }
+            KeyCode::Char('!') => {
+                self.prompt = PromptMode::Command {
+                    input: "!".to_string(),
+                }
+            }
             KeyCode::Char('&') => {
                 self.prompt = PromptMode::Filter {
                     input: String::new(),
@@ -362,7 +376,7 @@ impl Pager {
             KeyCode::Char('N') => self.repeat_search(true)?,
             KeyCode::Char('h') => self.prompt = PromptMode::Help,
             KeyCode::Char('r') | KeyCode::Char('R') => self.reload_if_possible()?,
-            KeyCode::Char('v') => self.open_in_editor()?,
+            KeyCode::Char('v') => self.open_in_editor(),
             KeyCode::Char('F') => self.config.follow = !self.config.follow,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => self.quit = true,
             _ => {}
@@ -840,6 +854,11 @@ impl Pager {
             return Ok(());
         }
 
+        if let Some(shell_command) = command.strip_prefix('!') {
+            self.run_shell_command(shell_command);
+            return Ok(());
+        }
+
         match command {
             "n" => self.jump_to_adjacent_file(1),
             "p" => self.jump_to_adjacent_file(-1),
@@ -913,22 +932,93 @@ impl Pager {
         ))
     }
 
-    fn open_in_editor(&mut self) -> Result<()> {
-        let current = self.docs.line(self.top_line).context("no current line")?;
-        let doc = self.docs.document(current.doc).context("missing doc")?;
-        let Some(path) = &doc.path else {
-            self.status = "stdin cannot be edited".to_string();
-            return Ok(());
+    fn open_in_editor(&mut self) {
+        let context = match self.current_command_context() {
+            Ok(context) => context,
+            Err(err) => {
+                self.status = err.to_string();
+                return;
+            }
         };
-        terminal::disable_raw_mode()?;
+        let Some(path) = context.path.as_ref() else {
+            self.status = "stdin cannot be edited".to_string();
+            return;
+        };
+        if let Err(err) = terminal::disable_raw_mode() {
+            self.status = format!("launching editor: {err}");
+            return;
+        }
         let _guard = RawModeGuard;
-        let mut editor = command_from_string(&self.config.editor)?;
-        editor.arg(format!("+{}", current.local_line + 1)).arg(path);
-        let status = editor.status().context("launching editor")?;
+        let mut editor = match command_from_string(&self.config.editor) {
+            Ok(editor) => editor,
+            Err(err) => {
+                self.status = err.to_string();
+                return;
+            }
+        };
+        editor.arg(format!("+{}", context.line)).arg(path);
+        let status = match editor.status() {
+            Ok(status) => status,
+            Err(err) => {
+                self.status = format!("launching editor: {err}");
+                return;
+            }
+        };
         if !status.success() {
             self.status = format!("editor exited with {}", status);
         }
-        Ok(())
+    }
+
+    fn run_shell_command(&mut self, command: &str) {
+        let command = command.trim();
+        if command.is_empty() {
+            self.status = "missing shell command".to_string();
+            return;
+        }
+
+        let context = match self.current_command_context() {
+            Ok(context) => context,
+            Err(err) => {
+                self.status = err.to_string();
+                return;
+            }
+        };
+        if let Err(err) = terminal::disable_raw_mode() {
+            self.status = format!("launching command: {err}");
+            return;
+        }
+        let _guard = RawModeGuard;
+        let mut shell_command = match command_from_string_with_default(command, None) {
+            Ok(command) => command,
+            Err(err) => {
+                self.status = err.to_string();
+                return;
+            }
+        };
+        apply_command_context(&mut shell_command, &context);
+        let status = match shell_command.status() {
+            Ok(status) => status,
+            Err(err) => {
+                self.status = format!("launching command: {err}");
+                return;
+            }
+        };
+        if !status.success() {
+            self.status = format!("command exited with {}", status);
+        } else {
+            self.status.clear();
+        }
+    }
+
+    fn current_command_context(&self) -> Result<CommandContext> {
+        let current = self.docs.line(self.top_line).context("no current line")?;
+        let doc = self.docs.document(current.doc).context("missing doc")?;
+        Ok(CommandContext {
+            label: doc.name.clone(),
+            path: doc.path.clone(),
+            line: current.local_line.saturating_add(1),
+            global_line: current.global_line.saturating_add(1),
+        })
     }
 }
 
@@ -941,14 +1031,31 @@ impl Drop for RawModeGuard {
 }
 
 fn command_from_string(cmd: &str) -> Result<Command> {
-    let parts =
-        shell_words::split(cmd).with_context(|| format!("parsing editor command {cmd:?}"))?;
+    command_from_string_with_default(cmd, Some("vim"))
+}
+
+fn command_from_string_with_default(cmd: &str, default_program: Option<&str>) -> Result<Command> {
+    let parts = shell_words::split(cmd).with_context(|| format!("parsing command {cmd:?}"))?;
     let mut parts = parts.into_iter();
-    let mut command = Command::new(parts.next().unwrap_or_else(|| "vim".to_string()));
+    let mut command = Command::new(match parts.next() {
+        Some(program) => program,
+        None => default_program
+            .map(std::borrow::ToOwned::to_owned)
+            .context("missing shell command")?,
+    });
     for part in parts {
         command.arg(part);
     }
     Ok(command)
+}
+
+fn apply_command_context(command: &mut Command, context: &CommandContext) {
+    command.env("XLESS_FILE", &context.label);
+    command.env("XLESS_LINE", context.line.to_string());
+    command.env("XLESS_GLOBAL_LINE", context.global_line.to_string());
+    if let Some(path) = &context.path {
+        command.env("XLESS_PATH", path);
+    }
 }
 
 fn estimate_rows(
@@ -1068,7 +1175,7 @@ fn rewind_lines(
     idx
 }
 
-const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  & filter  n/N next/prev  :n/:p files  m/M mark  ' jump  v editor  r/R reload";
+const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  & filter  n/N next/prev  :n/:p files  ! shell  m/M mark  ' jump  v editor  r/R reload";
 
 fn bottom_line_for_screen(
     docs: &DocumentSet,
@@ -1400,6 +1507,18 @@ mod tests {
     }
 
     #[test]
+    fn exclamation_opens_shell_prompt() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('!'), KeyModifiers::NONE))
+            .unwrap();
+        assert!(matches!(
+            pager.prompt,
+            PromptMode::Command { ref input } if input == "!"
+        ));
+    }
+
+    #[test]
     fn filters_visible_lines_and_restores_the_view() {
         let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.apply_filter("beta");
@@ -1429,6 +1548,43 @@ mod tests {
         pager.config.chop_long_lines = false;
         pager.scroll_right(40);
         assert_eq!(pager.horizontal_offset, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shell_commands_run_with_current_file_context() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let script = tmp.path().join("capture.sh");
+        let output = tmp.path().join("output.txt");
+        let input = tmp.path().join("input.txt");
+        std::fs::write(
+            &script,
+            r#"#!/bin/sh
+printf '%s|%s|%s|%s' "$XLESS_FILE" "$XLESS_PATH" "$XLESS_LINE" "$XLESS_GLOBAL_LINE" > "$1"
+"#,
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        std::fs::write(&input, "alpha\nbeta\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(std::slice::from_ref(&input), &Config::default()).unwrap();
+        let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
+        pager.top_line = 1;
+
+        pager
+            .execute_command(&format!("!{} {}", script.display(), output.display()))
+            .unwrap();
+
+        let captured = std::fs::read_to_string(output).unwrap();
+        assert_eq!(
+            captured,
+            format!("{}|{}|2|2", input.display(), input.display())
+        );
+        assert!(pager.status.is_empty());
     }
 
     #[test]

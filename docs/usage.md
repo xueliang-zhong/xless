@@ -55,6 +55,7 @@ xcat src/lib.rs | xless
 - `n` and `N` repeat the last search.
 - `m` marks the first visible line, `M` marks the last visible line, and `'` jumps back to a saved mark.
 - `:` opens a small command prompt. Use `:n` to jump to the next file and `:p` to jump to the previous file when you opened multiple paths.
+- `!` opens a shell-command prompt. Enter `!git status` or `!xcat src/lib.rs`; `XLESS_FILE`, `XLESS_PATH`, `XLESS_LINE`, and `XLESS_GLOBAL_LINE` are set for the launched process.
 - `v` open the current file in your editor.
 - `r` or `R` reload a file from disk.
 - `Left` and `Right` scroll horizontally when `-S` / `--chop-long-lines` is enabled, and `Home` returns to the left edge.
@@ -78,6 +79,7 @@ xcat src/lib.rs | xless
 - `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.
 - `m`, `M`, and `'` give you fast return points when you are comparing code, logs, or filtered `fzf` output.
 - `:n` and `:p` move between files in a multi-file session, which is handy when `xless` opens a batch from `git`, `xargs`, or `fzf`.
+- `!` runs an external command without leaving the pager; it is useful for quick `git`, `xcat`, or ad-hoc inspection commands.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
 - Use `-r` when you want raw control characters to pass through; `-R` remains a compatibility alias.
 - The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.

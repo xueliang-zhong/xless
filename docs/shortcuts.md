@@ -10,6 +10,7 @@
 - `&` filters the current view to matching lines; submit an empty pattern to clear the filter.
 - `n`, `N` repeat the last search.
 - `:` opens a command prompt; use `:n` and `:p` to move to the next or previous file in a multi-file session.
+- `!` opens a shell-command prompt for quick `git`, `xcat`, or ad-hoc commands.
 - `m`, `M`, `'` set and jump to a line mark.
 - `v` open the current file in the configured editor.
 - `r`, `R` reload the current file from disk.
@@ -23,3 +24,4 @@ Search runs over visible text, so `n` and `N` keep working even when the source 
 `G` now lands on the last screenful of the file instead of pinning the final line at the top.
 `M` marks the last visible line on screen, which is useful when comparing wrapped or multi-line output.
 `-s` squeezes repeated blank lines to keep dense logs easier to scan.
+Shell commands launched from `!` get `XLESS_FILE`, `XLESS_PATH`, `XLESS_LINE`, and `XLESS_GLOBAL_LINE` in their environment so scripts can inspect the current location.
