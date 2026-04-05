@@ -28,6 +28,7 @@ pub struct Pager {
     engine: SyntaxEngine,
     startup: Vec<StartupCommand>,
     top_line: usize,
+    count_buffer: String,
     prompt: PromptMode,
     status: String,
     last_search: Option<SearchState>,
@@ -52,7 +53,8 @@ enum PromptMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MarkAction {
-    Set,
+    SetFirst,
+    SetLast,
     Jump,
 }
 
@@ -65,6 +67,7 @@ impl Pager {
             engine,
             startup,
             top_line: 0,
+            count_buffer: String::new(),
             prompt: PromptMode::Normal,
             status: String::new(),
             last_search: None,
@@ -103,7 +106,8 @@ impl Pager {
                     Some(self.status.as_str())
                 }
                 PromptMode::Mark { action } => Some(match action {
-                    MarkAction::Set => "mark: set",
+                    MarkAction::SetFirst => "mark: set first",
+                    MarkAction::SetLast => "mark: set last",
                     MarkAction::Jump => "mark: jump",
                 }),
                 PromptMode::Help => Some(HELP_TEXT),
@@ -220,32 +224,64 @@ impl Pager {
     }
 
     fn handle_normal_key(&mut self, key: KeyEvent) -> Result<()> {
+        if key.modifiers.is_empty()
+            && let KeyCode::Char(c) = key.code
+            && c.is_ascii_digit()
+        {
+            if c != '0' || !self.count_buffer.is_empty() {
+                self.count_buffer.push(c);
+            }
+            return Ok(());
+        }
+        let count = self.take_count();
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
-            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => self.scroll(1),
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll(count.unwrap_or(1))
+            }
             KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.scroll_up(1)
+                self.scroll_up(count.unwrap_or(1))
             }
-            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => self.scroll(1),
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll(count.unwrap_or(1))
+            }
             KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.scroll_up(1)
+                self.scroll_up(count.unwrap_or(1))
             }
-            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.page_down(),
-            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.page_up(),
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.page_down_count(count)
+            }
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.page_up_count(count)
+            }
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.page_down_half()
+                self.page_down_half_count(count)
             }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.page_up_half()
+                self.page_up_half_count(count)
             }
-            KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll(1),
-            KeyCode::Char('k') | KeyCode::Up => self.scroll_up(1),
-            KeyCode::Char('f') | KeyCode::PageDown | KeyCode::Char(' ') => self.page_down(),
-            KeyCode::Char('b') | KeyCode::PageUp => self.page_up(),
-            KeyCode::Char('d') => self.page_down_half(),
-            KeyCode::Char('u') => self.page_up_half(),
-            KeyCode::Char('g') => self.top_line = 0,
-            KeyCode::Char('G') => self.bottom(),
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll(count.unwrap_or(1)),
+            KeyCode::Char('k') | KeyCode::Up => self.scroll_up(count.unwrap_or(1)),
+            KeyCode::Char('f') | KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.page_down_count(count)
+            }
+            KeyCode::Char('b') | KeyCode::PageUp => self.page_up_count(count),
+            KeyCode::Char('d') => self.page_down_half_count(count),
+            KeyCode::Char('u') => self.page_up_half_count(count),
+            KeyCode::Char('g') => {
+                self.top_line = count
+                    .map_or(0, |line| line.saturating_sub(1))
+                    .min(self.docs.line_count().saturating_sub(1));
+            }
+            KeyCode::Char('G') => {
+                if let Some(line) = count {
+                    self.top_line = line
+                        .saturating_sub(1)
+                        .min(self.docs.line_count().saturating_sub(1));
+                } else {
+                    self.bottom();
+                }
+            }
             KeyCode::Char('/') => {
                 self.prompt = PromptMode::Search {
                     input: String::new(),
@@ -260,7 +296,12 @@ impl Pager {
             }
             KeyCode::Char('m') => {
                 self.prompt = PromptMode::Mark {
-                    action: MarkAction::Set,
+                    action: MarkAction::SetFirst,
+                }
+            }
+            KeyCode::Char('M') => {
+                self.prompt = PromptMode::Mark {
+                    action: MarkAction::SetLast,
                 }
             }
             KeyCode::Char('\'') => {
@@ -271,7 +312,7 @@ impl Pager {
             KeyCode::Char('n') => self.repeat_search(false)?,
             KeyCode::Char('N') => self.repeat_search(true)?,
             KeyCode::Char('h') => self.prompt = PromptMode::Help,
-            KeyCode::Char('r') => self.reload_if_possible()?,
+            KeyCode::Char('r') | KeyCode::Char('R') => self.reload_if_possible()?,
             KeyCode::Char('v') => self.open_in_editor()?,
             KeyCode::Char('F') => self.config.follow = !self.config.follow,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => self.quit = true,
@@ -321,7 +362,11 @@ impl Pager {
                     return Ok(false);
                 }
                 match action {
-                    MarkAction::Set => self.set_mark(c),
+                    MarkAction::SetFirst => self.set_mark(c, self.top_line),
+                    MarkAction::SetLast => {
+                        let line = self.visible_last_line().unwrap_or(self.top_line);
+                        self.set_mark(c, line);
+                    }
                     MarkAction::Jump => self.jump_to_mark(c),
                 }
                 return Ok(true);
@@ -481,6 +526,38 @@ impl Pager {
         self.top_line = self.top_line.saturating_sub(lines);
     }
 
+    fn page_down_count(&mut self, count: Option<usize>) {
+        if let Some(lines) = count {
+            self.scroll(lines);
+        } else {
+            self.page_down();
+        }
+    }
+
+    fn page_up_count(&mut self, count: Option<usize>) {
+        if let Some(lines) = count {
+            self.scroll_up(lines);
+        } else {
+            self.page_up();
+        }
+    }
+
+    fn page_down_half_count(&mut self, count: Option<usize>) {
+        if let Some(lines) = count {
+            self.scroll(lines);
+        } else {
+            self.page_down_half();
+        }
+    }
+
+    fn page_up_half_count(&mut self, count: Option<usize>) {
+        if let Some(lines) = count {
+            self.scroll_up(lines);
+        } else {
+            self.page_up_half();
+        }
+    }
+
     fn bottom(&mut self) {
         let screen = terminal::size().unwrap_or((80, 24));
         self.top_line = bottom_line_for_screen(
@@ -525,8 +602,8 @@ impl Pager {
         Ok(())
     }
 
-    fn set_mark(&mut self, mark: char) {
-        self.marks.insert(mark, self.top_line);
+    fn set_mark(&mut self, mark: char, line: usize) {
+        self.marks.insert(mark, line);
         self.status = format!("set mark {mark}");
     }
 
@@ -537,6 +614,31 @@ impl Pager {
         } else {
             self.status = format!("mark {mark} not set");
         }
+    }
+
+    fn take_count(&mut self) -> Option<usize> {
+        if self.count_buffer.is_empty() {
+            return None;
+        }
+
+        let mut value = 0usize;
+        for ch in self.count_buffer.chars() {
+            let digit = ch.to_digit(10)? as usize;
+            value = value.saturating_mul(10).saturating_add(digit);
+        }
+        self.count_buffer.clear();
+        Some(value)
+    }
+
+    fn visible_last_line(&self) -> Option<usize> {
+        let (width, height) = terminal::size().ok()?;
+        Some(visible_last_line_for_screen(
+            &self.docs,
+            self.top_line,
+            width as usize,
+            height as usize,
+            &self.config,
+        ))
     }
 
     fn open_in_editor(&mut self) -> Result<()> {
@@ -695,7 +797,7 @@ fn rewind_lines(
 }
 
 const HELP_TEXT: &str =
-    "q quit  j/k scroll  f/b page  / search  n/N next/prev  m mark  ' jump  v editor  r reload";
+    "q quit  j/k scroll  f/b page  / search  n/N next/prev  m/M mark  ' jump  v editor  r/R reload";
 
 fn bottom_line_for_screen(
     docs: &DocumentSet,
@@ -740,6 +842,52 @@ fn bottom_line_for_screen(
         }
     }
     start
+}
+
+fn visible_last_line_for_screen(
+    docs: &DocumentSet,
+    top_line: usize,
+    width: usize,
+    height: usize,
+    config: &Config,
+) -> usize {
+    if docs.line_count() == 0 {
+        return 0;
+    }
+
+    let limit = if config.status_bar {
+        height.saturating_sub(1)
+    } else {
+        height
+    };
+    if limit == 0 {
+        return top_line.min(docs.line_count().saturating_sub(1));
+    }
+
+    let mut used_rows = 0usize;
+    let mut last = top_line.min(docs.line_count().saturating_sub(1));
+    for idx in top_line.min(docs.line_count())..docs.line_count() {
+        let Some(view) = docs.line(idx) else {
+            continue;
+        };
+        let rows = estimate_rows(
+            &view.text,
+            width,
+            config.chop_long_lines,
+            config.tab_width,
+            config.raw_control_chars,
+        )
+        .max(1);
+        if used_rows + rows > limit {
+            break;
+        }
+        used_rows += rows;
+        last = idx;
+        if used_rows == limit {
+            break;
+        }
+    }
+    last
 }
 
 #[cfg(test)]
@@ -867,7 +1015,7 @@ mod tests {
     fn marks_jump_back_to_saved_line() {
         let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.top_line = 2;
-        pager.set_mark('a');
+        pager.set_mark('a', 2);
         pager.top_line = 0;
         pager.jump_to_mark('a');
         assert_eq!(pager.top_line, 2);
@@ -903,6 +1051,47 @@ mod tests {
     }
 
     #[test]
+    fn numeric_prefixes_apply_to_motion_commands() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE))
+            .unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(pager.top_line, 2);
+
+        pager.top_line = 3;
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE))
+            .unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(pager.top_line, 1);
+    }
+
+    #[test]
+    fn numeric_prefixes_jump_to_requested_lines() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE))
+            .unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(pager.top_line, 1);
+
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE))
+            .unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('G'), KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(pager.top_line, 3);
+    }
+
+    #[test]
     fn startup_line_and_follow_commands_apply() {
         let mut pager = Pager::new(
             Config::default(),
@@ -913,5 +1102,14 @@ mod tests {
         pager.apply_startup_commands().unwrap();
         assert!(pager.config.follow);
         assert_eq!(pager.top_line, 2);
+    }
+
+    #[test]
+    fn mark_last_visible_line_uses_rendered_bottom_of_screen() {
+        let docs = sample_set();
+        let mut config = Config::default();
+        config.status_bar = false;
+        let line = visible_last_line_for_screen(&docs, 1, 80, 2, &config);
+        assert_eq!(line, 2);
     }
 }

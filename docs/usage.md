@@ -35,6 +35,7 @@ xcat src/lib.rs | xless
 
 ## Interactive Controls
 
+- Numeric prefixes like `5j`, `2G`, or `10d` apply to the next motion command.
 - `j` / `Down` move down one line.
 - `k` / `Up` move up one line.
 - `f` / `Space` / `PageDown` scroll forward.
@@ -42,9 +43,9 @@ xcat src/lib.rs | xless
 - `/` search forward.
 - `?` search backward.
 - `n` and `N` repeat the last search.
-- `m` sets a mark and `'` jumps back to it.
+- `m` marks the first visible line, `M` marks the last visible line, and `'` jumps back to a saved mark.
 - `v` open the current file in your editor.
-- `r` reload a file from disk.
+- `r` or `R` reload a file from disk.
 - `q` quit.
 - `Ctrl-E` and `Ctrl-Y` move one line forward or backward; `Ctrl-F` / `Ctrl-B` page forward or backward; `Ctrl-D` / `Ctrl-U` move by half pages.
 
@@ -59,7 +60,7 @@ xcat src/lib.rs | xless
 - `-p` / `--pattern` starts the pager on the first matching line before you begin interacting with it.
 - Leading `+` startup commands follow the less convention for jumping to a line, searching forward or backward, jumping to the bottom, or starting in follow mode.
 - `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.
-- `m` and `'` give you a fast return point when you are comparing code, logs, or filtered `fzf` output.
+- `m`, `M`, and `'` give you fast return points when you are comparing code, logs, or filtered `fzf` output.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
 - The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.
 - Use xless after filtering with `fzf`, for example:
