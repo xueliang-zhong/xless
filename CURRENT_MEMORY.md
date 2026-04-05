@@ -20,3 +20,7 @@
 - Keep `r` as a compatibility alias if you add less-style `R` reload behavior; it avoids breaking existing muscle memory while still matching the pager convention better.
 - Startup-command parsing is cleaner and faster when it scans the leading prefix once and uses `split_off` instead of repeated `remove(0)`; keep the parser on `&Path` so the API stays slice-oriented.
 - Horizontal scrolling is easiest to keep correct when the renderer owns the clipping logic; for chopped lines, preserve style emission only when the first visible character for a span reaches the screen, and keep pager state limited to the column offset plus key bindings.
+- Startup searches should include the current/top line on initial positioning so `-p` and leading `+/<pattern>` can land on the first visible match, while interactive repeat searches still skip the current line.
+- Status-bar composition should preserve file and line context alongside transient messages; don't let a temporary status string replace the whole summary line.
+- Less-style search parity is subtle: `-i` should stop folding case when the pattern itself contains uppercase letters, and `-I` is the explicit escape hatch for always-on case-insensitive matching.
+- Multi-file jumps are easiest to keep predictable when `DocumentSet` exposes helpers for the first visible line of each document and the pager routes `:n` / `:p` through a separate command prompt instead of search state.

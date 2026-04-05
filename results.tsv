@@ -14,3 +14,26 @@ timestamp_utc	generation	status	commit	note
 2026-04-05T17:42:34Z	6	committed	c0011cf6a181d1bb15a664e50cede340adc41382	HEAD advanced
 2026-04-05T17:45:32Z	gen07	success	13022c3	Respect highlight config in renderer
 2026-04-05T17:45:32Z	7	committed	13022c3	HEAD advanced
+2026-04-05T17:45:49Z	7	committed	be25edf397505253b1c6f50348fbdb693b11bbdc	HEAD advanced
+2026-04-05T17:51:00Z	gen08	success	dde5092	Add less-style startup commands and cached line metadata
+2026-04-05T17:51:00Z	8	committed	d1a0ee41816976267aa79a327b59f361d8f2e547	HEAD advanced
+2026-04-05T17:51:24Z	8	committed	d1a0ee41816976267aa79a327b59f361d8f2e547	HEAD advanced
+2026-04-05T17:55:02Z	gen09	success	a7771b6d2f4c171a021438eb490d3c808116d462	Add blank-line squeezing and control-key motion
+2026-04-05T17:55:02Z	9	committed	4c2d8f09907de0513c87ed69394211773b4be0e0	HEAD advanced
+2026-04-05T17:55:53Z	9	committed	4c2d8f09907de0513c87ed69394211773b4be0e0	HEAD advanced
+2026-04-05T18:00:20Z	gen10	success	6a5824b2f46deda44cf9675f65aa2ab4a9ec21ee	Add counted navigation and visible-tail marks
+2026-04-05T18:00:20Z	10	committed	6a5824b2f46deda44cf9675f65aa2ab4a9ec21ee	HEAD advanced
+2026-04-05T18:01:06Z	10	committed	6a5824b2f46deda44cf9675f65aa2ab4a9ec21ee	HEAD advanced
+2026-04-05T18:03:44Z	gen11	success	f368c6147c0ccd6b8824c32ee47dd4e4b61f3198	Optimize startup parsing and pager helpers
+2026-04-05T18:03:44Z	11	committed	f368c6147c0ccd6b8824c32ee47dd4e4b61f3198	HEAD advanced
+2026-04-05T18:04:31Z	11	committed	f368c6147c0ccd6b8824c32ee47dd4e4b61f3198	HEAD advanced
+2026-04-05T18:09:49Z	gen12	success	892bbba7da267ff16763bc01bee0a4f0e1afb7cf	Add horizontal scrolling for chopped long lines
+2026-04-05T18:09:49Z	12	committed	892bbba7da267ff16763bc01bee0a4f0e1afb7cf	HEAD advanced
+2026-04-05T18:10:23Z	12	committed	892bbba7da267ff16763bc01bee0a4f0e1afb7cf	HEAD advanced
+2026-04-05T18:13:16Z	gen13	success	316a9428bcfdfd7a2a2d057586ceec06ff9fa58a	Fix startup search to include the first line and keep status context visible
+2026-04-05T18:13:16Z	13	committed	316a9428bcfdfd7a2a2d057586ceec06ff9fa58a	HEAD advanced
+2026-04-05T18:15:21Z	13	committed	316a9428bcfdfd7a2a2d057586ceec06ff9fa58a	HEAD advanced
+2026-04-05T18:19:16Z	gen14	success	9fdc360cb5a28728e569dc51015fe220c40d9b60	Add less-style search case parity and raw-control alias
+2026-04-05T18:19:16Z	14	committed	9fdc360cb5a28728e569dc51015fe220c40d9b60	HEAD advanced
+2026-04-05T18:19:47Z	14	committed	9fdc360cb5a28728e569dc51015fe220c40d9b60	HEAD advanced
+2026-04-05T18:24:59Z	gen15	success	555389a	Add less-style file jumps via command prompt and document helpers
