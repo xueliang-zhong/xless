@@ -7,6 +7,7 @@
 - `d`, `u` move by half pages.
 - `g`, `G` jump to the top or bottom.
 - `/`, `?` start forward or backward search.
+- `&` filters the current view to matching lines; submit an empty pattern to clear the filter.
 - `n`, `N` repeat the last search.
 - `:` opens a command prompt; use `:n` and `:p` to move to the next or previous file in a multi-file session.
 - `m`, `M`, `'` set and jump to a line mark.

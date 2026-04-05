@@ -24,6 +24,7 @@ pub enum StartupCommand {
 
 pub struct Pager {
     config: Config,
+    base_docs: DocumentSet,
     docs: DocumentSet,
     engine: SyntaxEngine,
     startup: Vec<StartupCommand>,
@@ -33,6 +34,7 @@ pub struct Pager {
     prompt: PromptMode,
     status: String,
     last_search: Option<SearchState>,
+    active_filter: Option<FilterState>,
     marks: HashMap<char, usize>,
     quit: bool,
 }
@@ -45,9 +47,16 @@ struct SearchState {
 }
 
 #[derive(Debug, Clone)]
+struct FilterState {
+    pattern: String,
+    regex: regex::bytes::Regex,
+}
+
+#[derive(Debug, Clone)]
 enum PromptMode {
     Normal,
     Search { input: String, backward: bool },
+    Filter { input: String },
     Mark { action: MarkAction },
     Command { input: String },
     Help,
@@ -63,9 +72,11 @@ enum MarkAction {
 impl Pager {
     pub fn new(config: Config, docs: DocumentSet, startup: Vec<StartupCommand>) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
+        let base_docs = docs;
         Ok(Self {
             config,
-            docs,
+            base_docs: base_docs.clone(),
+            docs: base_docs,
             engine,
             startup,
             top_line: 0,
@@ -74,6 +85,7 @@ impl Pager {
             prompt: PromptMode::Normal,
             status: String::new(),
             last_search: None,
+            active_filter: None,
             marks: HashMap::new(),
             quit: false,
         })
@@ -104,6 +116,10 @@ impl Pager {
                     } else {
                         format!("/{}", input)
                     };
+                    Some(self.status.as_str())
+                }
+                PromptMode::Filter { input } => {
+                    self.status = format!("&{}", input);
                     Some(self.status.as_str())
                 }
                 PromptMode::Mark { action } => Some(match action {
@@ -210,6 +226,14 @@ impl Pager {
                     self.prompt = PromptMode::Normal;
                 } else {
                     self.prompt = PromptMode::Search { input, backward };
+                }
+            }
+            PromptMode::Filter { mut input } => {
+                let done = self.handle_filter_key(key, &mut input)?;
+                if done {
+                    self.prompt = PromptMode::Normal;
+                } else {
+                    self.prompt = PromptMode::Filter { input };
                 }
             }
             PromptMode::Mark { action } => {
@@ -319,6 +343,11 @@ impl Pager {
                     input: String::new(),
                 }
             }
+            KeyCode::Char('&') => {
+                self.prompt = PromptMode::Filter {
+                    input: String::new(),
+                }
+            }
             KeyCode::Char('M') => {
                 self.prompt = PromptMode::Mark {
                     action: MarkAction::SetLast,
@@ -356,6 +385,30 @@ impl Pager {
                 let query = input.clone();
                 self.perform_search(&query, backward)?;
                 self.status.clear();
+                return Ok(true);
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            KeyCode::Char(c) => {
+                if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                    input.push(c);
+                }
+            }
+            _ => {}
+        }
+        Ok(false)
+    }
+
+    fn handle_filter_key(&mut self, key: KeyEvent, input: &mut String) -> Result<bool> {
+        match key.code {
+            KeyCode::Esc => {
+                self.status.clear();
+                return Ok(true);
+            }
+            KeyCode::Enter => {
+                let query = input.clone();
+                self.apply_filter(&query);
                 return Ok(true);
             }
             KeyCode::Backspace => {
@@ -693,10 +746,78 @@ impl Pager {
     }
 
     fn reload_if_possible(&mut self) -> Result<()> {
-        let docs = self.docs.reloaded(&self.config)?;
-        self.docs = docs;
-        self.top_line = self.top_line.min(self.docs.line_count().saturating_sub(1));
+        let current_line = self
+            .docs
+            .line(self.top_line)
+            .and_then(|view| (!view.header).then_some((view.doc, view.local_line)));
+        self.base_docs = self.base_docs.reloaded(&self.config)?;
+        self.docs = self.rebuild_current_view();
+        self.top_line = self.remap_top_line(current_line);
         Ok(())
+    }
+
+    fn apply_filter(&mut self, pattern: &str) {
+        let pattern = pattern.trim();
+        let next_docs = if pattern.is_empty() {
+            self.active_filter = None;
+            self.base_docs.clone()
+        } else {
+            match self.engine.search_regex(
+                pattern,
+                self.config.ignore_case,
+                self.config.ignore_case_always,
+            ) {
+                Ok(regex) => {
+                    self.active_filter = Some(FilterState {
+                        pattern: pattern.to_string(),
+                        regex,
+                    });
+                    self.base_docs
+                        .filtered(&self.active_filter.as_ref().unwrap().regex, &self.config)
+                }
+                Err(err) => {
+                    self.status = err.to_string();
+                    return;
+                }
+            }
+        };
+
+        let current_line = self
+            .docs
+            .line(self.top_line)
+            .and_then(|view| (!view.header).then_some((view.doc, view.local_line)));
+        self.docs = next_docs;
+        self.top_line = self.remap_top_line(current_line);
+        self.status = if let Some(filter) = &self.active_filter {
+            format!("filtered {}", filter.pattern)
+        } else {
+            "filter cleared".to_string()
+        };
+    }
+
+    fn rebuild_current_view(&self) -> DocumentSet {
+        if let Some(filter) = &self.active_filter {
+            self.base_docs.filtered(&filter.regex, &self.config)
+        } else {
+            self.base_docs.clone()
+        }
+    }
+
+    fn remap_top_line(&self, current_line: Option<(usize, usize)>) -> usize {
+        if self.docs.line_count() == 0 {
+            return 0;
+        }
+
+        if let Some((doc, local_line)) = current_line {
+            if let Some(line) = self.docs.line_for_document_line(doc, local_line) {
+                return line;
+            }
+            if let Some(line) = self.docs.first_visible_line_for_document(doc) {
+                return line;
+            }
+        }
+
+        self.docs.first_visible_line_for_document(0).unwrap_or(0)
     }
 
     fn set_mark(&mut self, mark: char, line: usize) {
@@ -947,7 +1068,7 @@ fn rewind_lines(
     idx
 }
 
-const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  n/N next/prev  :n/:p files  m/M mark  ' jump  v editor  r/R reload";
+const HELP_TEXT: &str = "q quit  j/k scroll  f/b page  / search  & filter  n/N next/prev  :n/:p files  m/M mark  ' jump  v editor  r/R reload";
 
 fn bottom_line_for_screen(
     docs: &DocumentSet,
@@ -1267,6 +1388,31 @@ mod tests {
             .handle_normal_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL))
             .unwrap();
         assert_eq!(pager.top_line, 0);
+    }
+
+    #[test]
+    fn ampersand_opens_filter_prompt() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('&'), KeyModifiers::NONE))
+            .unwrap();
+        assert!(matches!(pager.prompt, PromptMode::Filter { .. }));
+    }
+
+    #[test]
+    fn filters_visible_lines_and_restores_the_view() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager.apply_filter("beta");
+        assert_eq!(pager.docs.line_count(), 2);
+        assert_eq!(pager.docs.line(0).unwrap().text, "beta");
+        assert_eq!(pager.top_line, 0);
+        assert_eq!(pager.status, "filtered beta");
+
+        pager.apply_filter("");
+        assert_eq!(pager.docs.line_count(), 4);
+        assert_eq!(pager.docs.line(0).unwrap().text, "alpha");
+        assert_eq!(pager.top_line, 1);
+        assert_eq!(pager.status, "filter cleared");
     }
 
     #[test]

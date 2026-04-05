@@ -51,6 +51,7 @@ xcat src/lib.rs | xless
 - `b` / `PageUp` scroll backward.
 - `/` search forward.
 - `?` search backward.
+- `&` filter the visible lines with a regular expression. Press `Enter` on an empty filter to clear it.
 - `n` and `N` repeat the last search.
 - `m` marks the first visible line, `M` marks the last visible line, and `'` jumps back to a saved mark.
 - `:` opens a small command prompt. Use `:n` to jump to the next file and `:p` to jump to the previous file when you opened multiple paths.
@@ -65,6 +66,7 @@ xcat src/lib.rs | xless
 - `git diff --color=always | xless` preserves SGR colors while still allowing xless to render syntax and status information.
 - `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
+- `&` is useful when you want to narrow a large file, diff, or log stream to only the matching lines.
 - `-i` keeps less-style case rules, while `-I` forces case-insensitive search even if the pattern contains uppercase letters.
 - `-x` / `--tabs` changes the tab stop width used for rendering and row accounting.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.

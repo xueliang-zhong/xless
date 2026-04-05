@@ -10,7 +10,7 @@ use memmap2::MmapOptions;
 use crate::config::Config;
 use crate::highlight::{SyntaxChoice, SyntaxEngine};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DocumentSet {
     pub docs: Vec<Document>,
     pub lines: Vec<LineRef>,
@@ -74,6 +74,10 @@ impl DocumentSet {
         self.line_number_width
     }
 
+    pub fn filtered(&self, regex: &regex::bytes::Regex, config: &Config) -> Self {
+        Self::from_documents_with_filter(self.docs.clone(), config, Some(regex))
+    }
+
     pub fn line(&self, global_line: usize) -> Option<LineView<'_>> {
         let line_ref = self.lines.get(global_line)?;
         let doc = &self.docs[line_ref.doc];
@@ -122,6 +126,12 @@ impl DocumentSet {
             .or_else(|| self.first_line_for_document(doc_index))
     }
 
+    pub fn line_for_document_line(&self, doc_index: usize, local_line: usize) -> Option<usize> {
+        self.lines.iter().position(|line_ref| {
+            line_ref.doc == doc_index && !line_ref.header && line_ref.local_line == local_line
+        })
+    }
+
     pub fn reloaded(&self, config: &Config) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
         let mut docs = Vec::with_capacity(self.docs.len());
@@ -136,35 +146,51 @@ impl DocumentSet {
     }
 
     fn from_documents(docs: Vec<Document>, config: &Config) -> Self {
+        Self::from_documents_with_filter(docs, config, None)
+    }
+
+    fn from_documents_with_filter(
+        docs: Vec<Document>,
+        config: &Config,
+        filter: Option<&regex::bytes::Regex>,
+    ) -> Self {
         let mut lines = Vec::new();
         let show_headers = docs.len() > 1;
         for (doc_index, doc) in docs.iter().enumerate() {
+            let mut filtered_lines = Vec::new();
             let mut previous_blank = false;
-            if show_headers {
-                lines.push(LineRef {
-                    doc: doc_index,
-                    local_line: 0,
-                    header: true,
-                });
-                previous_blank = false;
-            }
             for local_line in 0..doc.line_count() {
+                let Some(bytes) = doc.line_bytes(local_line) else {
+                    continue;
+                };
+                if let Some(regex) = filter
+                    && !matches_filter(regex, bytes, config.raw_control_chars)
+                {
+                    continue;
+                }
                 if config.squeeze_blank_lines {
-                    let is_blank = doc
-                        .line_bytes(local_line)
-                        .map(|bytes| {
-                            if config.raw_control_chars {
-                                bytes.is_empty()
-                            } else {
-                                SyntaxEngine::strip_ansi_sequences(bytes).is_empty()
-                            }
-                        })
-                        .unwrap_or(false);
+                    let is_blank = if config.raw_control_chars {
+                        bytes.is_empty()
+                    } else {
+                        SyntaxEngine::strip_ansi_sequences(bytes).is_empty()
+                    };
                     if is_blank && previous_blank {
                         continue;
                     }
                     previous_blank = is_blank;
                 }
+                filtered_lines.push(local_line);
+            }
+
+            if show_headers && (filter.is_none() || !filtered_lines.is_empty()) {
+                lines.push(LineRef {
+                    doc: doc_index,
+                    local_line: 0,
+                    header: true,
+                });
+            }
+
+            for local_line in filtered_lines {
                 lines.push(LineRef {
                     doc: doc_index,
                     local_line,
@@ -183,6 +209,15 @@ impl DocumentSet {
             line_number_width,
         }
     }
+}
+
+fn matches_filter(regex: &regex::bytes::Regex, bytes: &[u8], raw_control_chars: bool) -> bool {
+    let bytes = if raw_control_chars {
+        Cow::Borrowed(bytes)
+    } else {
+        SyntaxEngine::strip_ansi_sequences(bytes)
+    };
+    regex.is_match(bytes.as_ref())
 }
 
 impl Document {
@@ -355,5 +390,26 @@ mod tests {
         assert_eq!(set.line(0).unwrap().text, "alpha");
         assert_eq!(set.line(1).unwrap().text, "");
         assert_eq!(set.line(2).unwrap().text, "beta");
+    }
+
+    #[test]
+    fn filters_lines_without_losing_multi_file_headers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first.rs");
+        let second = tmp.path().join("second.rs");
+        std::fs::write(&first, "alpha\nbeta\n").unwrap();
+        std::fs::write(&second, "gamma\nalpha\n").unwrap();
+        let set = DocumentSet::from_paths(&[first, second], &Config::default()).unwrap();
+        let engine = SyntaxEngine::new(&Config::default().theme).unwrap();
+        let regex = engine.search_regex("alpha", false, false).unwrap();
+        let filtered = set.filtered(&regex, &Config::default());
+
+        assert_eq!(filtered.line_count(), 4);
+        assert!(filtered.line(0).unwrap().header);
+        assert_eq!(filtered.line(1).unwrap().text, "alpha");
+        assert!(filtered.line(2).unwrap().header);
+        assert_eq!(filtered.line(3).unwrap().text, "alpha");
+        assert_eq!(filtered.line_for_document_line(0, 0), Some(1));
+        assert_eq!(filtered.line_for_document_line(1, 1), Some(3));
     }
 }
