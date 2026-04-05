@@ -13,6 +13,7 @@ pub struct Config {
     pub line_numbers: bool,
     pub raw_control_chars: bool,
     pub chop_long_lines: bool,
+    pub squeeze_blank_lines: bool,
     pub quit_if_one_screen: bool,
     pub no_init: bool,
     pub follow: bool,
@@ -32,6 +33,7 @@ impl Default for Config {
             line_numbers: false,
             raw_control_chars: false,
             chop_long_lines: false,
+            squeeze_blank_lines: false,
             quit_if_one_screen: false,
             no_init: false,
             follow: false,
@@ -53,6 +55,7 @@ pub struct ConfigFile {
     pub line_numbers: Option<bool>,
     pub raw_control_chars: Option<bool>,
     pub chop_long_lines: Option<bool>,
+    pub squeeze_blank_lines: Option<bool>,
     pub quit_if_one_screen: Option<bool>,
     pub no_init: Option<bool>,
     pub follow: Option<bool>,
@@ -95,6 +98,9 @@ impl Config {
         if args.chop_long_lines {
             self.chop_long_lines = true;
         }
+        if args.squeeze_blank_lines {
+            self.squeeze_blank_lines = true;
+        }
         if args.quit_if_one_screen {
             self.quit_if_one_screen = true;
         }
@@ -130,6 +136,9 @@ impl Config {
         }
         if let Some(v) = file.chop_long_lines {
             self.chop_long_lines = v;
+        }
+        if let Some(v) = file.squeeze_blank_lines {
+            self.squeeze_blank_lines = v;
         }
         if let Some(v) = file.quit_if_one_screen {
             self.quit_if_one_screen = v;
@@ -190,6 +199,7 @@ mod tests {
             r#"
 line_numbers = true
 tab_width = 8
+squeeze_blank_lines = true
 theme = "InspiredGitHub"
 editor = "nvim"
 "#,
@@ -198,6 +208,7 @@ editor = "nvim"
         let loaded = Config::load(Some(&path)).unwrap();
         assert!(loaded.line_numbers);
         assert_eq!(loaded.tab_width, 8);
+        assert!(loaded.squeeze_blank_lines);
         assert_eq!(loaded.theme, "InspiredGitHub");
         assert_eq!(loaded.editor, "nvim");
     }

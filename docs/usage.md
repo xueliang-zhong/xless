@@ -46,6 +46,7 @@ xcat src/lib.rs | xless
 - `v` open the current file in your editor.
 - `r` reload a file from disk.
 - `q` quit.
+- `Ctrl-E` and `Ctrl-Y` move one line forward or backward; `Ctrl-F` / `Ctrl-B` page forward or backward; `Ctrl-D` / `Ctrl-U` move by half pages.
 
 ## Git, Vim, and fzf
 
@@ -54,6 +55,7 @@ xcat src/lib.rs | xless
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
 - `--no-highlight` is useful when you want raw source text without syntax coloring, while still keeping ANSI colors from upstream tools.
+- `-s` / `--squeeze-blank-lines` collapses consecutive blank lines like less, which is useful for long logs and heavily separated output.
 - `-p` / `--pattern` starts the pager on the first matching line before you begin interacting with it.
 - Leading `+` startup commands follow the less convention for jumping to a line, searching forward or backward, jumping to the bottom, or starting in follow mode.
 - `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.

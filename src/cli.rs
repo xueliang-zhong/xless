@@ -27,6 +27,9 @@ pub struct Args {
     #[arg(short = 'S', long = "chop-long-lines")]
     pub chop_long_lines: bool,
 
+    #[arg(short = 's', long = "squeeze-blank-lines")]
+    pub squeeze_blank_lines: bool,
+
     #[arg(short = 'F', long = "quit-if-one-screen")]
     pub quit_if_one_screen: bool,
 

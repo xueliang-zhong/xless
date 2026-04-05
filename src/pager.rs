@@ -222,6 +222,22 @@ impl Pager {
     fn handle_normal_key(&mut self, key: KeyEvent) -> Result<()> {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => self.quit = true,
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => self.scroll(1),
+            KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_up(1)
+            }
+            KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => self.scroll(1),
+            KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.scroll_up(1)
+            }
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => self.page_down(),
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => self.page_up(),
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.page_down_half()
+            }
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.page_up_half()
+            }
             KeyCode::Char('j') | KeyCode::Down | KeyCode::Enter => self.scroll(1),
             KeyCode::Char('k') | KeyCode::Up => self.scroll_up(1),
             KeyCode::Char('f') | KeyCode::PageDown | KeyCode::Char(' ') => self.page_down(),
@@ -863,6 +879,27 @@ mod tests {
         let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
         pager.jump_to_mark('z');
         assert_eq!(pager.status, "mark z not set");
+    }
+
+    #[test]
+    fn control_keys_move_by_single_lines() {
+        let mut pager = Pager::new(Config::default(), sample_set(), Vec::new()).unwrap();
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL))
+            .unwrap();
+        assert_eq!(pager.top_line, 1);
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL))
+            .unwrap();
+        assert_eq!(pager.top_line, 0);
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL))
+            .unwrap();
+        assert_eq!(pager.top_line, 1);
+        pager
+            .handle_normal_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL))
+            .unwrap();
+        assert_eq!(pager.top_line, 0);
     }
 
     #[test]

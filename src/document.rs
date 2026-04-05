@@ -57,13 +57,13 @@ impl DocumentSet {
             let doc = Document::load(path, config, &engine)?;
             docs.push(doc);
         }
-        Ok(Self::from_documents(docs))
+        Ok(Self::from_documents(docs, config))
     }
 
     pub fn from_stdin(config: &Config) -> Result<Self> {
         let engine = SyntaxEngine::new(&config.theme)?;
         let doc = Document::from_stdin(config, &engine)?;
-        Ok(Self::from_documents(vec![doc]))
+        Ok(Self::from_documents(vec![doc], config))
     }
 
     pub fn line_count(&self) -> usize {
@@ -115,21 +115,39 @@ impl DocumentSet {
                 docs.push(doc.clone());
             }
         }
-        Ok(Self::from_documents(docs))
+        Ok(Self::from_documents(docs, config))
     }
 
-    fn from_documents(docs: Vec<Document>) -> Self {
+    fn from_documents(docs: Vec<Document>, config: &Config) -> Self {
         let mut lines = Vec::new();
         let show_headers = docs.len() > 1;
         for (doc_index, doc) in docs.iter().enumerate() {
+            let mut previous_blank = false;
             if show_headers {
                 lines.push(LineRef {
                     doc: doc_index,
                     local_line: 0,
                     header: true,
                 });
+                previous_blank = false;
             }
             for local_line in 0..doc.line_count() {
+                if config.squeeze_blank_lines {
+                    let is_blank = doc
+                        .line_bytes(local_line)
+                        .map(|bytes| {
+                            if config.raw_control_chars {
+                                bytes.is_empty()
+                            } else {
+                                SyntaxEngine::strip_ansi_sequences(bytes).is_empty()
+                            }
+                        })
+                        .unwrap_or(false);
+                    if is_blank && previous_blank {
+                        continue;
+                    }
+                    previous_blank = is_blank;
+                }
                 lines.push(LineRef {
                     doc: doc_index,
                     local_line,
@@ -290,5 +308,19 @@ mod tests {
         std::fs::write(&second, "b\n".repeat(120)).unwrap();
         let set = DocumentSet::from_paths(&[first, second], &Config::default()).unwrap();
         assert_eq!(set.line_number_width(), 3);
+    }
+
+    #[test]
+    fn squeezes_consecutive_blank_lines_when_enabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("blank.rs");
+        std::fs::write(&path, "alpha\n\n\nbeta\n").unwrap();
+        let mut config = Config::default();
+        config.squeeze_blank_lines = true;
+        let set = DocumentSet::from_paths(&[path], &config).unwrap();
+        assert_eq!(set.line_count(), 3);
+        assert_eq!(set.line(0).unwrap().text, "alpha");
+        assert_eq!(set.line(1).unwrap().text, "");
+        assert_eq!(set.line(2).unwrap().text, "beta");
     }
 }

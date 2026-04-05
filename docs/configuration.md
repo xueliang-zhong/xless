@@ -8,6 +8,7 @@ Example:
 line_numbers = true
 raw_control_chars = false
 chop_long_lines = false
+squeeze_blank_lines = false
 quit_if_one_screen = true
 no_init = false
 follow = false
@@ -25,6 +26,7 @@ editor = "vim"
 - `line_numbers`: show line numbers on the left.
 - `raw_control_chars`: pass raw control characters through without sanitizing them.
 - `chop_long_lines`: truncate long lines instead of wrapping.
+- `squeeze_blank_lines`: collapse consecutive blank lines to a single visible line.
 - `quit_if_one_screen`: exit immediately when the file fits in the terminal.
 - `no_init`: skip the alternate screen.
 - `follow`: keep reloading appended file contents.
@@ -35,7 +37,6 @@ editor = "vim"
 - `tab_width`: tab stop width.
 - `theme`: syntect theme name.
 - `editor`: editor command used by the `v` key. It is parsed with shell-style quoting, so values such as `nvim -u 'NORC profile'` work as expected.
-- `highlight`: enable syntax highlighting for plain source text. ANSI color sequences from tools like `git` and `xcat` still pass through unless `raw_control_chars = true`.
 
 ## Color Handling
 
