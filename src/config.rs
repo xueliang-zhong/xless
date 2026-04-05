@@ -18,6 +18,7 @@ pub struct Config {
     pub no_init: bool,
     pub follow: bool,
     pub ignore_case: bool,
+    pub ignore_case_always: bool,
     pub wrap_search: bool,
     pub highlight: bool,
     pub status_bar: bool,
@@ -38,6 +39,7 @@ impl Default for Config {
             no_init: false,
             follow: false,
             ignore_case: false,
+            ignore_case_always: false,
             wrap_search: true,
             highlight: true,
             status_bar: true,
@@ -60,6 +62,7 @@ pub struct ConfigFile {
     pub no_init: Option<bool>,
     pub follow: Option<bool>,
     pub ignore_case: Option<bool>,
+    pub ignore_case_always: Option<bool>,
     pub wrap_search: Option<bool>,
     pub highlight: Option<bool>,
     pub status_bar: Option<bool>,
@@ -113,6 +116,9 @@ impl Config {
         if args.ignore_case {
             self.ignore_case = true;
         }
+        if args.ignore_case_always {
+            self.ignore_case_always = true;
+        }
         if let Some(language) = &args.language {
             self.language = Some(language.clone());
         }
@@ -151,6 +157,9 @@ impl Config {
         }
         if let Some(v) = file.ignore_case {
             self.ignore_case = v;
+        }
+        if let Some(v) = file.ignore_case_always {
+            self.ignore_case_always = v;
         }
         if let Some(v) = file.wrap_search {
             self.wrap_search = v;
@@ -200,6 +209,7 @@ mod tests {
 line_numbers = true
 tab_width = 8
 squeeze_blank_lines = true
+ignore_case_always = true
 theme = "InspiredGitHub"
 editor = "nvim"
 "#,
@@ -209,6 +219,7 @@ editor = "nvim"
         assert!(loaded.line_numbers);
         assert_eq!(loaded.tab_width, 8);
         assert!(loaded.squeeze_blank_lines);
+        assert!(loaded.ignore_case_always);
         assert_eq!(loaded.theme, "InspiredGitHub");
         assert_eq!(loaded.editor, "nvim");
     }

@@ -17,6 +17,7 @@
 
 The pager keeps ANSI SGR colors from tools like `git`, `less -R`, and `xcat` while stripping unsafe terminal control sequences by default.
 Search runs over visible text, so `n` and `N` keep working even when the source line contains color escapes.
+`-i` follows less-style case handling, so an uppercase letter in the pattern keeps the search case-sensitive; `-I` forces case-insensitive matching.
 `G` now lands on the last screenful of the file instead of pinning the final line at the top.
 `M` marks the last visible line on screen, which is useful when comparing wrapped or multi-line output.
 `-s` squeezes repeated blank lines to keep dense logs easier to scan.

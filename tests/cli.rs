@@ -12,3 +12,13 @@ fn dumps_effective_config() {
         .stdout(contains("line_numbers = true"))
         .stdout(contains("highlight = false"));
 }
+
+#[test]
+fn accepts_less_style_raw_control_alias() {
+    let mut cmd = Command::cargo_bin("xless").unwrap();
+    cmd.arg("--dump-config")
+        .arg("-r")
+        .assert()
+        .success()
+        .stdout(contains("raw_control_chars = true"));
+}

@@ -396,7 +396,11 @@ impl Pager {
         }
         let regex = self
             .engine
-            .search_regex(pattern, self.config.ignore_case)
+            .search_regex(
+                pattern,
+                self.config.ignore_case,
+                self.config.ignore_case_always,
+            )
             .context("search")?;
         let found = self.locate_match(&regex, backward, include_current_line);
         if let Some(line) = found {
@@ -1013,6 +1017,38 @@ mod tests {
             DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
         let mut pager = Pager::new(Config::default(), docs, Vec::new()).unwrap();
         pager.perform_search("abcd", false).unwrap();
+        assert_eq!(pager.top_line, 1);
+    }
+
+    #[test]
+    fn ignore_case_search_follows_less_case_rules() {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "alpha\nbeta\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let config = Config {
+            ignore_case: true,
+            ..Config::default()
+        };
+        let mut pager = Pager::new(config, docs, Vec::new()).unwrap();
+        pager.perform_search("BETA", false).unwrap();
+        assert_eq!(pager.top_line, 0);
+        assert_eq!(pager.status, "pattern not found");
+    }
+
+    #[test]
+    fn ignore_case_always_keeps_matching_uppercase_patterns() {
+        let tmp = NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "alpha\nbeta\n").unwrap();
+        let docs =
+            DocumentSet::from_paths(&[tmp.path().to_path_buf()], &Config::default()).unwrap();
+        let config = Config {
+            ignore_case: true,
+            ignore_case_always: true,
+            ..Config::default()
+        };
+        let mut pager = Pager::new(config, docs, Vec::new()).unwrap();
+        pager.perform_search("BETA", false).unwrap();
         assert_eq!(pager.top_line, 1);
     }
 

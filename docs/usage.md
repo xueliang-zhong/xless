@@ -16,6 +16,9 @@ xless -p main src/main.rs
 xless -p 'fn main' Cargo.toml README.md
 ```
 
+Startup searches include the current top line, so a match on the first visible line is still selected.
+`-i` follows less-style search rules, where uppercase letters in the pattern keep matching case-sensitive text; use `-I` when you want to force case-insensitive matching.
+
 Use less-style startup commands before the file list:
 
 ```bash
@@ -55,6 +58,7 @@ xcat src/lib.rs | xless
 - `git diff --color=always | xless` preserves SGR colors while still allowing xless to render syntax and status information.
 - `git`, `xcat`, and `less -R` output keep ANSI colors, including 256-color and truecolor SGR sequences.
 - Search ignores the escape scaffolding around colored spans, so patterns match the text you actually see.
+- `-i` keeps less-style case rules, while `-I` forces case-insensitive search even if the pattern contains uppercase letters.
 - Row-based motion and `-F` follow visible text instead of ANSI scaffolding, so colored output does not throw off screen-fit or page scrolling.
 - When `-S` / `--chop-long-lines` is active, left/right arrows let you pan across long lines without losing ANSI colors or syntax highlighting.
 - `--no-highlight` is useful when you want raw source text without syntax coloring, while still keeping ANSI colors from upstream tools.
@@ -64,6 +68,7 @@ xcat src/lib.rs | xless
 - `G` jumps to the last screenful of content instead of leaving the final line pinned at the top.
 - `m`, `M`, and `'` give you fast return points when you are comparing code, logs, or filtered `fzf` output.
 - Press `v` to jump into `vim`, `nvim`, or the editor configured in `~/.xless/config.toml`.
+- Use `-r` when you want raw control characters to pass through; `-R` remains a compatibility alias.
 - The `editor` setting supports quoted arguments, so commands like `nvim -u 'NORC profile'` are valid.
 - Use xless after filtering with `fzf`, for example:
 

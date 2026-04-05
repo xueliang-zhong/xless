@@ -312,14 +312,23 @@ impl SyntaxEngine {
         }
     }
 
-    pub fn search_regex(&self, pattern: &str, ignore_case: bool) -> Result<BytesRegex> {
-        let builder = if ignore_case {
+    pub fn search_regex(
+        &self,
+        pattern: &str,
+        ignore_case: bool,
+        ignore_case_always: bool,
+    ) -> Result<BytesRegex> {
+        let builder = if should_ignore_case(pattern, ignore_case, ignore_case_always) {
             format!("(?i){}", pattern)
         } else {
             pattern.to_string()
         };
         BytesRegex::new(&builder).context("compiling search pattern")
     }
+}
+
+fn should_ignore_case(pattern: &str, ignore_case: bool, ignore_case_always: bool) -> bool {
+    ignore_case_always || (ignore_case && !pattern.chars().any(char::is_uppercase))
 }
 
 fn push_span(spans: &mut Vec<StyledSpan>, buf: &mut String, style: TextStyle) {
