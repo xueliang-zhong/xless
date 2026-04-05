@@ -1,5 +1,5 @@
 use std::io::IsTerminal;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -103,20 +103,21 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-fn split_startup_commands(files: Vec<PathBuf>) -> (Vec<StartupCommand>, Vec<PathBuf>) {
-    let mut files = files;
+fn split_startup_commands(mut files: Vec<PathBuf>) -> (Vec<StartupCommand>, Vec<PathBuf>) {
     let mut startup = Vec::new();
-    while let Some(first) = files.first() {
-        let Some(command) = parse_startup_command(first) else {
+    let mut split_at = 0usize;
+    while let Some(path) = files.get(split_at) {
+        let Some(command) = parse_startup_command(path.as_path()) else {
             break;
         };
         startup.push(command);
-        files.remove(0);
+        split_at += 1;
     }
+    let files = files.split_off(split_at);
     (startup, files)
 }
 
-fn parse_startup_command(path: &PathBuf) -> Option<StartupCommand> {
+fn parse_startup_command(path: &Path) -> Option<StartupCommand> {
     let text = path.to_str()?;
     let rest = text.strip_prefix('+')?;
     match rest {

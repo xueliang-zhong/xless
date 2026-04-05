@@ -76,14 +76,14 @@ impl Config {
             Some(path) => Some(path.to_path_buf()),
             None => default_config_path(),
         };
-        if let Some(path) = path {
-            if path.exists() {
-                let text = fs::read_to_string(&path)
-                    .with_context(|| format!("reading config {}", path.display()))?;
-                let parsed: ConfigFile = toml::from_str(&text)
-                    .with_context(|| format!("parsing config {}", path.display()))?;
-                config.merge_file(parsed);
-            }
+        if let Some(path) = path
+            && path.exists()
+        {
+            let text = fs::read_to_string(&path)
+                .with_context(|| format!("reading config {}", path.display()))?;
+            let parsed: ConfigFile = toml::from_str(&text)
+                .with_context(|| format!("parsing config {}", path.display()))?;
+            config.merge_file(parsed);
         }
         Ok(config)
     }

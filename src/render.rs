@@ -327,8 +327,10 @@ mod tests {
         assert!(highlighted.contains("\u{1b}["));
 
         let mut plain = Vec::new();
-        let mut plain_config = Config::default();
-        plain_config.highlight = false;
+        let plain_config = Config {
+            highlight: false,
+            ..Config::default()
+        };
         render_line(&mut plain, &docs, &engine, &plain_config, &view, 80, 0).unwrap();
         assert_eq!(String::from_utf8(plain).unwrap(), "fn main() {}");
     }

@@ -315,8 +315,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("blank.rs");
         std::fs::write(&path, "alpha\n\n\nbeta\n").unwrap();
-        let mut config = Config::default();
-        config.squeeze_blank_lines = true;
+        let config = Config {
+            squeeze_blank_lines: true,
+            ..Config::default()
+        };
         let set = DocumentSet::from_paths(&[path], &config).unwrap();
         assert_eq!(set.line_count(), 3);
         assert_eq!(set.line(0).unwrap().text, "alpha");

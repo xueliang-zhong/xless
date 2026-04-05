@@ -47,10 +47,10 @@ impl SyntaxEngine {
         if let Some(language) = language_hint {
             return SyntaxChoice::Named(language.to_string());
         }
-        if let Some(path) = path {
-            if let Some(syntax) = self.syntax_for_path(path, bytes) {
-                return SyntaxChoice::Named(syntax.name.clone());
-            }
+        if let Some(path) = path
+            && let Some(syntax) = self.syntax_for_path(path, bytes)
+        {
+            return SyntaxChoice::Named(syntax.name.clone());
         }
         SyntaxChoice::Plain
     }
@@ -97,8 +97,10 @@ impl SyntaxEngine {
         let mut spans = Vec::new();
         if let Ok(ranges) = highlighter.highlight_line(line, self.ps) {
             for (style, text) in ranges {
-                let mut span_style = TextStyle::default();
-                span_style.fg = Some(style.foreground.into());
+                let mut span_style = TextStyle {
+                    fg: Some(style.foreground.into()),
+                    ..TextStyle::default()
+                };
                 if style
                     .font_style
                     .contains(syntect::highlighting::FontStyle::BOLD)
@@ -140,7 +142,7 @@ impl SyntaxEngine {
                         push_span(&mut spans, &mut buf, current);
                         let mut params = String::new();
                         let mut final_byte = None;
-                        while let Some(next) = chars.next() {
+                        for next in chars.by_ref() {
                             if ('@'..='~').contains(&next) {
                                 final_byte = Some(next);
                                 break;
@@ -331,7 +333,7 @@ fn push_span(spans: &mut Vec<StyledSpan>, buf: &mut String, style: TextStyle) {
 
 fn skip_escape_string(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     let mut saw_escape = false;
-    while let Some(next) = chars.next() {
+    for next in chars.by_ref() {
         if next == '\u{7}' {
             return;
         }

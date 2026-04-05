@@ -441,10 +441,10 @@ impl Pager {
             start_line.saturating_add(1)
         };
         for idx in start..self.docs.line_count() {
-            if let Some(view) = self.docs.line(idx) {
-                if self.matches_search(regex, view.bytes.as_ref()) {
-                    return Some(idx);
-                }
+            if let Some(view) = self.docs.line(idx)
+                && self.matches_search(regex, view.bytes.as_ref())
+            {
+                return Some(idx);
             }
         }
         None
@@ -467,10 +467,10 @@ impl Pager {
             start_line - 1
         };
         loop {
-            if let Some(view) = self.docs.line(idx) {
-                if self.matches_search(regex, view.bytes.as_ref()) {
-                    return Some(idx);
-                }
+            if let Some(view) = self.docs.line(idx)
+                && self.matches_search(regex, view.bytes.as_ref())
+            {
+                return Some(idx);
             }
             if idx == 0 {
                 break;
@@ -689,6 +689,7 @@ fn estimate_rows(
     if width == 0 {
         return 1;
     }
+    let tab_width = tab_width.max(1);
     let mut rows = 1usize;
     let mut col = 0usize;
     let mut chars = text.chars().peekable();
@@ -698,10 +699,9 @@ fn estimate_rows(
             continue;
         }
         let rendered = if ch == '\t' {
-            let spaces = tab_width.max(1) - (col % tab_width.max(1));
-            spaces
+            tab_width - (col % tab_width)
         } else if ch.is_control() {
-            if ch == '\u{7f}' { 2 } else { 2 }
+            2
         } else {
             UnicodeWidthChar::width(ch).unwrap_or(1)
         };
@@ -721,7 +721,7 @@ fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
     match chars.peek().copied() {
         Some('[') => {
             chars.next();
-            while let Some(next) = chars.next() {
+            for next in chars.by_ref() {
                 if ('@'..='~').contains(&next) {
                     break;
                 }
@@ -730,7 +730,7 @@ fn skip_ansi_escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
         Some(']') | Some('P') | Some('_') | Some('^') | Some('X') => {
             chars.next();
             let mut saw_escape = false;
-            while let Some(next) = chars.next() {
+            for next in chars.by_ref() {
                 if next == '\u{7}' {
                     break;
                 }
@@ -1004,8 +1004,10 @@ mod tests {
 
     #[test]
     fn backward_search_wraps_to_last_match() {
-        let mut config = Config::default();
-        config.wrap_search = true;
+        let config = Config {
+            wrap_search: true,
+            ..Config::default()
+        };
         let mut pager = Pager::new(config, sample_set(), Vec::new()).unwrap();
         pager.perform_search("beta", true).unwrap();
         assert_eq!(pager.top_line, 3);
@@ -1107,8 +1109,10 @@ mod tests {
     #[test]
     fn mark_last_visible_line_uses_rendered_bottom_of_screen() {
         let docs = sample_set();
-        let mut config = Config::default();
-        config.status_bar = false;
+        let config = Config {
+            status_bar: false,
+            ..Config::default()
+        };
         let line = visible_last_line_for_screen(&docs, 1, 80, 2, &config);
         assert_eq!(line, 2);
     }
